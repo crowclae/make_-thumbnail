@@ -685,17 +685,10 @@ async function processOne(buffer, index) {
 
       <div class="panel-section">
         <div class="section-label">グリッド設定</div>
-        <div class="field-row">
-          <div class="field">
-            <label>列数 COLS</label>
-            <input type="number" id="cols" value="5" min="1" max="50">
-          </div>
-          <div class="field">
-            <label>行数 ROWS</label>
-            <input type="number" id="rows" value="5" min="1" max="50">
-          </div>
+        <div class="computed" id="grid-computed" style="margin-bottom:10px">
+          ファイルを追加するとグリッドを自動計算します
         </div>
-        <div class="field-row" style="margin-top:8px">
+        <div class="field-row">
           <div class="field">
             <label>横間隔 GAP X</label>
             <input type="number" id="gapX" value="4" min="0" max="200">
@@ -840,9 +833,23 @@ const btnDl      = document.getElementById('btn-download');
 
 /* ── Settings getters ── */
 const g = id => document.getElementById(id);
+
+/* ── 最適グリッド自動計算 ── */
+function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
+  if (n <= 0) return { cols: 1, rows: 1 };
+  let bestCols = 1, bestArea = -1;
+  for (let c = 1; c <= n; c++) {
+    const r  = Math.ceil(n / c);
+    const tw = (outW - 2 * padX - (c - 1) * gapX) / c;
+    const th = (outH - 2 * padY - (r - 1) * gapY) / r;
+    if (tw <= 0 || th <= 0) continue;
+    const area = tw * th;
+    if (area > bestArea) { bestArea = area; bestCols = c; }
+  }
+  return { cols: bestCols, rows: Math.ceil(n / bestCols) };
+}
+
 function getSettings() {
-  const cols   = Math.max(1, parseInt(g('cols').value)   || 5);
-  const rows   = Math.max(1, parseInt(g('rows').value)   || 5);
   const outW   = Math.max(100, parseInt(g('outW').value) || 4000);
   const outH   = Math.max(100, parseInt(g('outH').value) || 3000);
   const gapX   = Math.max(0, parseInt(g('gapX').value)   || 0);
@@ -853,6 +860,8 @@ function getSettings() {
   const cropMode = g('cropMode').checked;
   const filename = (g('filename').value || 'contact_sheet').replace(/[^\w\-]/g, '_');
 
+  const n = files.length || 1;
+  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
   const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
   const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
 
@@ -860,16 +869,43 @@ function getSettings() {
            outputWidth: outW, outputHeight: outH, thumbW, thumbH };
 }
 
-/* ── Computed thumb size display ── */
+/* ── グリッド・サムネイルサイズ表示更新 ── */
 function updateComputed() {
-  const s = getSettings();
-  const el = document.getElementById('thumb-computed');
-  const valid = s.thumbW > 0 && s.thumbH > 0;
-  el.innerHTML = valid
-    ? `サムネイル: <strong>${s.thumbW} × ${s.thumbH} px</strong>　（${s.cols * s.rows} 枚まで）`
-    : `<span style="color:var(--err)">⚠ パラメータが不正 — サムネイルサイズが負になります</span>`;
+  const outW = Math.max(100, parseInt(g('outW').value) || 4000);
+  const outH = Math.max(100, parseInt(g('outH').value) || 3000);
+  const gapX = Math.max(0, parseInt(g('gapX').value)   || 0);
+  const gapY = Math.max(0, parseInt(g('gapY').value)   || 0);
+  const padX = Math.max(0, parseInt(g('padX').value)   || 0);
+  const padY = Math.max(0, parseInt(g('padY').value)   || 0);
+  const n    = files.length || 0;
+
+  const gridEl  = document.getElementById('grid-computed');
+  const thumbEl = document.getElementById('thumb-computed');
+
+  if (n === 0) {
+    gridEl.innerHTML  = 'ファイルを追加するとグリッドを自動計算します';
+    thumbEl.innerHTML = '—';
+    return;
+  }
+
+  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
+  const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
+  const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
+  const slots  = cols * rows;
+  const empty  = slots - n;
+
+  gridEl.innerHTML = `列 <strong>${cols}</strong> × 行 <strong>${rows}</strong>` +
+    ` = <strong>${slots}</strong> 枠` +
+    (empty > 0 ? `　<span style="color:var(--text2)">(空き ${empty})</span>` : '');
+
+  if (thumbW > 0 && thumbH > 0) {
+    thumbEl.innerHTML = `サムネイル: <strong>${thumbW} × ${thumbH} px</strong>`;
+  } else {
+    thumbEl.innerHTML = `<span style="color:var(--err)">⚠ パラメータが不正です</span>`;
+  }
 }
-['cols','rows','outW','outH','gapX','gapY','padX','padY'].forEach(id => {
+
+['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
   g(id).addEventListener('input', updateComputed);
 });
 updateComputed();
@@ -884,6 +920,7 @@ function addFiles(newFiles) {
   if (added.length === 0) { showAlert('対応フォーマットのファイルが見つかりません', 'err'); return; }
   files = files.concat(added);
   renderFileList();
+  updateComputed();
   updateGenBtn();
   outputSec.classList.remove('visible');
 }
@@ -947,6 +984,7 @@ btnClear.addEventListener('click', () => {
   fileGrid.innerHTML = '';
   fileWrap.style.display = 'none';
   outputSec.classList.remove('visible');
+  updateComputed();
   setProgress(0, '待機中 — ファイルをドロップしてください', '');
   updateGenBtn();
 });
@@ -1123,7 +1161,7 @@ async function generate() {
 }
 
 /* ── Settings changes update gen button ── */
-['cols','rows','outW','outH','gapX','gapY','padX','padY'].forEach(id => {
+['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
   g(id).addEventListener('input', updateGenBtn);
 });
 
