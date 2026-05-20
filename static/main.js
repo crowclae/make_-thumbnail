@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const status = document.getElementById('status');
     const downloadDiv = document.getElementById('download');
 
-    // フォームのデフォルトの送信（ページリロード）を防止
     form.addEventListener('submit', (e) => {
         e.preventDefault();
 
@@ -22,23 +21,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 2. フォームから設定パラメータを取得
+        // 2. パラメータの取得
         const totalWidth = parseInt(totalWidthInput.value, 10) || 2400;
         const totalHeight = parseInt(totalHeightInput.value, 10) || 1800;
         const cropping = croppingInput.checked;
         const bgColor = bgColorInput.value || 'black';
         const outputName = outputNameInput.value.trim() || 'contact_sheet.jpg';
 
-        // 画面表示のリセット
-        status.textContent = '処理中...（ブラウザ内で結合しています）';
+        status.textContent = '処理中...（ブラウザ内で並列処理を実行中）';
         status.style.color = 'inherit';
         downloadDiv.innerHTML = '';
 
-        // 3. Web Worker の初期化
-        // 毎回新しく生成することで、連続で実行した際のメモリや状態の混線を防ぎます
-        const worker = new Worker('worker.js');
+        // 3. Web Worker の初期化 (static/ から見て一つ上の階層にある worker.js を指定)
+        const worker = new Worker('../worker.js');
 
-        // 4. Worker からの結果（メッセージ）を受け取る処理
+        // 4. Worker からの処理結果の受け取り
         worker.onmessage = (event) => {
             if (event.data.error) {
                 status.textContent = 'エラー: ' + event.data.error;
@@ -46,11 +43,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            if (event.data.progress) {
+                status.textContent = `処理中... (${event.data.progress})`;
+                return;
+            }
+
             if (event.data.blob) {
                 const blob = event.data.blob;
                 const url = URL.createObjectURL(blob);
                 
-                // ダウンロードリンク（ボタン状の要素）の生成
+                // ダウンロードボタンの生成
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = outputName;
@@ -62,22 +64,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 a.style.color = '#fff';
                 a.style.textDecoration = 'none';
                 a.style.borderRadius = '4px';
+                a.style.fontWeight = 'bold';
                 
                 downloadDiv.appendChild(a);
-                status.textContent = '完了：ダウンロードリンクをクリックしてください。';
+                status.textContent = '完了：ダウンロードボタンをクリックしてください。';
                 status.style.color = 'green';
             }
         };
 
-        // Worker 自体のエラーハンドリング
         worker.onerror = (err) => {
             status.textContent = 'Worker内部エラー: ' + err.message;
             status.style.color = 'red';
         };
 
-        // 5. Worker へ画像データとパラメータを一括送信
+        // 5. 画像データを配列化して一括送信
         worker.postMessage({
-            files: Array.from(files), // ここを確実に配列化
+            files: files,
             totalWidth: totalWidth,
             totalHeight: totalHeight,
             cropping: cropping,
