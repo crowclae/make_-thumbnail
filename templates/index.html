@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RAW現像版・高速コンタクトシート作成 (Web)</title>
+  <style>
+    body{font-family:Arial, Helvetica, sans-serif;max-width:900px;margin:24px auto;padding:0 16px}
+    label{display:block;margin-top:12px}
+    input[type=text], select{padding:6px;width:180px}
+    .row{display:flex;gap:8px;align-items:center}
+    button{padding:10px 14px}
+    #status{margin-top:12px}
+  </style>
+</head>
+<body>
+  <h1>RAW現像版・高速コンタクトシート作成 (Web)</h1>
+  <form id="form">
+    <label>📂 元画像を選択（複数可）
+      <input type="file" id="images" name="images" multiple accept="image/*,.arw">
+    </label>
+
+    <div class="row">
+      <label>📏 幅(px)
+        <input type="text" name="total_width" id="total_width" value="2400">
+      </label>
+      <label>📏 高さ(px)
+        <input type="text" name="total_height" id="total_height" value="1800">
+      </label>
+      <label style="display:flex;align-items:center;gap:8px">短辺でトリミング
+        <input type="checkbox" name="cropping" id="cropping" checked>
+      </label>
+      <label>背景
+        <select name="bg_color" id="bg_color">
+          <option value="black" selected>黒</option>
+          <option value="white">白</option>
+        </select>
+      </label>
+    </div>
+
+    <label>📝 出力ファイル名
+      <input type="text" name="output_name" id="output_name" value="contact_sheet.jpg">
+    </label>
+
+    <div style="margin-top:12px">
+      <label style="display:flex;align-items:center;gap:8px">
+        ブラウザ単体で処理（WASMオプション）
+        <input type="checkbox" id="client_only">
+      </label>
+      <button type="submit">🚀 作成実行</button>
+    </div>
+  </form>
+
+  <div id="status"></div>
+  <div id="download"></div>
+
+  <script src="/static/main.js"></script>
+  <script src="/static/client_main.js"></script>
+</body>
+</html>
