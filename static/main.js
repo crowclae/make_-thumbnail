@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 5. Worker へ画像データとパラメータを一括送信
         worker.postMessage({
-            files: files,
+            files: Array.from(files), // ここを確実に配列化
             totalWidth: totalWidth,
             totalHeight: totalHeight,
             cropping: cropping,
