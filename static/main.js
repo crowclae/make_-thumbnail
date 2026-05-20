@@ -1,74 +1,87 @@
-document.getElementById('form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const status = document.getElementById('status');
-  const download = document.getElementById('download');
-  status.textContent = 'アップロード中...';
-  download.innerHTML = '';
-
-  const form = new FormData();
-  const files = document.getElementById('images').files;
-  if (!files.length) { status.textContent = '画像を選択してください'; return; }
-
-  for (let i = 0; i < files.length; i++) form.append('images', files[i]);
-  form.append('total_width', document.getElementById('total_width').value);
-  form.append('total_height', document.getElementById('total_height').value);
-  form.append('cropping', document.getElementById('cropping').checked ? 'true' : 'false');
-  form.append('bg_color', document.getElementById('bg_color').value);
-  form.append('output_name', document.getElementById('output_name').value);
-
-// 1. Workerの初期化（ファイルの先頭付近、またはイベントハンドラ外で定義）
-const worker = new Worker('worker.js');
-
-// --- 実行ボタンが押された時の処理の中身 ---
-// (フォームから画像やパラメータを取得する部分はそのまま)
-
-try {
-    status.textContent = '処理中...（ブラウザ内で実行中）';
-
-    // 2. Workerからの処理完了メッセージを待つPromiseを作成
-    const processImagesInFrontend = () => {
-        return new Promise((resolve, reject) => {
-            // Workerから結果が返ってきたときの処理
-            worker.onmessage = (e) => {
-                if (e.data.success) {
-                    resolve(e.data.blob); // 処理された画像のBlobを受け取る
-                } else {
-                    reject(new Error(e.data.error || '画像処理に失敗しました'));
-                }
-            };
-            
-            worker.onerror = (err) => reject(err);
-
-            // 3. Workerへ画像データと設定パラメータを送信
-            // ※ formから画像（Fileオブジェクト）や設定値を取り出してオブジェクトにする
-            const files = document.getElementById('image_input').files; 
-            const cropping = document.getElementById('cropping').checked;
-            const bg_color = document.getElementById('bg_color').value;
-            const output_name = document.getElementById('output_name').value;
-
-            worker.postMessage({
-                files: Array.from(files),
-                cropping: cropping,
-                bg_color: bg_color,
-                output_name: output_name
-            });
-        });
-    };
-
-    // 4. フロントエンドでの処理を実行
-    const blob = await processImagesInFrontend();
-
-    // 5. ダウンロード処理（現在の28行目以降のロジックをそのまま活用）
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = document.getElementById('output_name').value || 'thumbnail.jpg';
-    a.innerText = '結果をダウンロード';
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.querySelector('form');
+    const fileInput = document.getElementById('image_input');
+    const totalWidthInput = document.getElementById('total_width');
+    const totalHeightInput = document.getElementById('total_height');
+    const croppingInput = document.getElementById('cropping');
+    const bgColorInput = document.getElementById('bg_color');
+    const outputNameInput = document.getElementById('output_name');
     
-    download.appendChild(a);
-    status.textContent = '完了：ダウンロードリンクをクリックしてください';
+    const status = document.getElementById('status');
+    const downloadDiv = document.getElementById('download');
 
-} catch (err) {
-    status.textContent = 'エラー：' + err.message;
-}
+    // フォームのデフォルトの送信（ページリロード）を防止
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        // 1. 画像ファイルの選択チェック
+        const files = Array.from(fileInput.files);
+        if (files.length === 0) {
+            status.textContent = 'エラー：元画像を選択してください（複数可）。';
+            status.style.color = 'red';
+            return;
+        }
+
+        // 2. フォームから設定パラメータを取得
+        const totalWidth = parseInt(totalWidthInput.value, 10) || 2400;
+        const totalHeight = parseInt(totalHeightInput.value, 10) || 1800;
+        const cropping = croppingInput.checked;
+        const bgColor = bgColorInput.value || 'black';
+        const outputName = outputNameInput.value.trim() || 'contact_sheet.jpg';
+
+        // 画面表示のリセット
+        status.textContent = '処理中...（ブラウザ内で結合しています）';
+        status.style.color = 'inherit';
+        downloadDiv.innerHTML = '';
+
+        // 3. Web Worker の初期化
+        // 毎回新しく生成することで、連続で実行した際のメモリや状態の混線を防ぎます
+        const worker = new Worker('worker.js');
+
+        // 4. Worker からの結果（メッセージ）を受け取る処理
+        worker.onmessage = (event) => {
+            if (event.data.error) {
+                status.textContent = 'エラー: ' + event.data.error;
+                status.style.color = 'red';
+                return;
+            }
+
+            if (event.data.blob) {
+                const blob = event.data.blob;
+                const url = URL.createObjectURL(blob);
+                
+                // ダウンロードリンク（ボタン状の要素）の生成
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = outputName;
+                a.textContent = `🚀 結果をダウンロード (${outputName})`;
+                a.style.display = 'inline-block';
+                a.style.marginTop = '10px';
+                a.style.padding = '10px 20px';
+                a.style.backgroundColor = '#007bff';
+                a.style.color = '#fff';
+                a.style.textDecoration = 'none';
+                a.style.borderRadius = '4px';
+                
+                downloadDiv.appendChild(a);
+                status.textContent = '完了：ダウンロードリンクをクリックしてください。';
+                status.style.color = 'green';
+            }
+        };
+
+        // Worker 自体のエラーハンドリング
+        worker.onerror = (err) => {
+            status.textContent = 'Worker内部エラー: ' + err.message;
+            status.style.color = 'red';
+        };
+
+        // 5. Worker へ画像データとパラメータを一括送信
+        worker.postMessage({
+            files: files,
+            totalWidth: totalWidth,
+            totalHeight: totalHeight,
+            cropping: cropping,
+            bgColor: bgColor
+        });
+    });
 });
