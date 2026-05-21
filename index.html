@@ -14,13 +14,13 @@
   --s1:        #0c0c0c;
   --s2:        #131313;
   --s3:        #1c1c1c;
-  --border:    #242424;
-  --border2:   #2e2e2e;
+  --border:    #343434;
+  --border2:   #454545;
   --amber:     #d4800c;
   --amber2:    #f0a832;
   --amber-dim: #3a2008;
   --text:      #c4bbb0;
-  --text2:     #7a7068;
+  --text2:     #a39a92;
   --text3:     #3e3830;
   --ok:        #4a8c5c;
   --err:       #8c3030;
@@ -33,7 +33,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--ff-mono);
-  font-size: 12px;
+  font-size: 14px;
   min-height: 100vh;
   line-height: 1.5;
   overflow: hidden;
@@ -96,7 +96,7 @@ header {
 .content { display: flex; flex: 1; overflow: hidden; }
 
 .panel {
-  width: 270px;
+  width: 300px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--s1);
@@ -131,7 +131,7 @@ header {
 .field-row .field { flex: 1; }
 label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text2);
   margin-bottom: 4px;
   letter-spacing: 0.05em;
@@ -145,7 +145,7 @@ input[type="color"] {
   color: var(--text);
   font-family: var(--ff-mono);
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   outline: none;
   transition: border-color 0.15s;
   border-radius: 2px;
@@ -155,9 +155,9 @@ input[type="text"]:focus { border-color: var(--amber); }
 input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
 
 .computed {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text2);
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: var(--s3);
   border: 1px solid var(--border);
   border-radius: 2px;
@@ -245,7 +245,7 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
   line-height: 12px; text-align: center; cursor: pointer; border-radius: 2px; z-index: 20;
 }
 .btn-remove-file:hover { background: var(--err); color: #ffffff; border-color: #e87070; }
-.file-name { font-size: 9px; color: var(--text2); padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--s1); border-top: 1px solid var(--border); }
+.file-name { font-size: 10px; color: var(--text2); padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--s1); border-top: 1px solid var(--border); }
 .raw-badge { position: absolute; top: 19px; left: 3px; background: var(--amber); color: #000; font-size: 7px; font-weight: 600; padding: 1px 3px; border-radius: 1px; z-index: 10; }
 
 .bottom-bar { border-top: 1px solid var(--border); background: var(--s1); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; position: sticky; bottom: 0; z-index: 90; }
