@@ -1,6 +1,4 @@
----
-
-# README.md
+README.md
 
 ```markdown
 # CONTACT SHEET — RAW Generator (Wasm Multi-thread)
