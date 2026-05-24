@@ -182,6 +182,34 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 }
 .computed strong { color: var(--amber2); }
 
+.file-card {
+  position: relative; /* ボタンを絶対配置するために必要 */
+}
+
+.file-del-btn {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-del-btn:hover {
+  background: var(--err);
+  border-color: white;
+}
+
 /* Checkbox */
 .check-row {
   display: flex;
@@ -957,6 +985,15 @@ function renderFileList() {
     card.className = 'file-card';
     card.dataset.index = i;
 
+    const delBtn = document.createElement('button');
+    delBtn.className = 'file-del-btn';
+    delBtn.innerHTML = '×';
+    delBtn.onclick = (e) => {
+      e.stopPropagation(); // 親要素のクリックイベントを防ぐ
+      removeFile(i);
+    };
+    card.appendChild(delBtn);
+
     const thumb = document.createElement('div');
     thumb.className = 'file-thumb';
 
@@ -1036,6 +1073,14 @@ function setProgress(pct, text, pctLabel) {
   progFill.style.width = `${pct}%`;
   progText.textContent = text;
   progPct.textContent  = pctLabel;
+}
+
+function removeFile(index) {
+  if (isProcessing) return; // 処理中は削除不可
+  files.splice(index, 1);
+  renderFileList();
+  updateComputed();
+  updateGenBtn();
 }
 
 /* ── Worker creation ── */
