@@ -890,15 +890,32 @@ const g = id => document.getElementById(id);
 /* ── 最適グリッド自動計算 ── */
 function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
   if (n <= 0) return { cols: 1, rows: 1 };
-  let bestCols = 1, bestArea = -1;
+  
+  let bestCols = 1;
+  let bestArea = -1;
+
+  // 1列から、最大でもn列まで試行
   for (let c = 1; c <= n; c++) {
-    const r  = Math.ceil(n / c);
+    const r = Math.ceil(n / c);
+    
+    // この列数・行数にした場合の1枚あたりのサイズを計算
     const tw = (outW - 2 * padX - (c - 1) * gapX) / c;
     const th = (outH - 2 * padY - (r - 1) * gapY) / r;
+
+    // サイズがマイナスになる場合はスキップ
     if (tw <= 0 || th <= 0) continue;
+
+    // 【重要】面積を計算
     const area = tw * th;
-    if (area > bestArea) { bestArea = area; bestCols = c; }
+
+    // 現在の候補よりも面積が広ければ更新する
+    // これにより「空き枠」が生じても、1枚が最も大きく表示される組み合わせが選ばれる
+    if (area > bestArea) {
+      bestArea = area;
+      bestCols = c;
+    }
   }
+  
   return { cols: bestCols, rows: Math.ceil(n / bestCols) };
 }
 
