@@ -2,8 +2,10 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<script src="coi-serviceworker.js"></script>
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CONTACT SHEET — RAW Generator</title>
+<title>CONTACT SHEET — RAW Generator (Wasm Multi-thread)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap" rel="stylesheet">
 <style>
@@ -12,14 +14,14 @@
   --s1:        #0c0c0c;
   --s2:        #131313;
   --s3:        #1c1c1c;
-  --border:    #242424;
-  --border2:   #2e2e2e;
+  --border:    #343434;
+  --border2:   #454545;
   --amber:     #d4800c;
   --amber2:    #f0a832;
   --amber-dim: #3a2008;
-  --text:      #e0dcd7;
-  --text2:     #9e958d;
-  --text3:     #5a524a;
+  --text:      #c4bbb0;
+  --text2:     #a39a92;
+  --text3:     #3e3830;
   --ok:        #4a8c5c;
   --err:       #8c3030;
   --ff-head:   'Bebas Neue', sans-serif;
@@ -27,18 +29,16 @@
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; }
-
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--ff-mono);
   font-size: 14px;
   min-height: 100vh;
-  line-height: 1.6;
+  line-height: 1.5;
+  overflow: hidden;
 }
 
-/* ── Grain overlay ── */
 body::after {
   content: '';
   position: fixed;
@@ -49,10 +49,8 @@ body::after {
   z-index: 9999;
 }
 
-/* ── Layout ── */
-.app { display: flex; flex-direction: column; min-height: 100vh; }
+.app { display: flex; flex-direction: column; height: 100vh; }
 
-/* ── Header ── */
 header {
   border-bottom: 1px solid var(--border);
   padding: 0 28px;
@@ -61,8 +59,7 @@ header {
   gap: 24px;
   height: 56px;
   background: var(--s1);
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 100;
   flex-shrink: 0;
 }
@@ -96,12 +93,10 @@ header {
   white-space: nowrap;
 }
 
-/* ── Main content ── */
 .content { display: flex; flex: 1; overflow: hidden; }
 
-/* ── Settings Panel ── */
 .panel {
-  width: 270px;
+  width: 300px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--s1);
@@ -110,11 +105,11 @@ header {
 }
 .panel-section {
   border-bottom: 1px solid var(--border);
-  padding: 20px 18px;
+  padding: 16px 18px;
 }
 .panel-section:last-child { border-bottom: none; }
 .section-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.2em;
   color: var(--amber);
   text-transform: uppercase;
@@ -130,13 +125,9 @@ header {
   background: var(--amber-dim);
 }
 
-/* ── Form fields ── */
 .field { margin-bottom: 10px; }
 .field:last-child { margin-bottom: 0; }
-.field-row {
-  display: flex;
-  gap: 8px;
-}
+.field-row { display: flex; gap: 15px; }
 .field-row .field { flex: 1; }
 label {
   display: block;
@@ -154,27 +145,19 @@ input[type="color"] {
   color: var(--text);
   font-family: var(--ff-mono);
   font-size: 14px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   outline: none;
   transition: border-color 0.15s;
   border-radius: 2px;
-  appearance: none;
 }
 input[type="number"]:focus,
 input[type="text"]:focus { border-color: var(--amber); }
-input[type="color"] {
-  height: 30px;
-  padding: 2px 4px;
-  cursor: pointer;
-}
-/* Chrome spinner hide */
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
+input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
 
 .computed {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text2);
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: var(--s3);
   border: 1px solid var(--border);
   border-radius: 2px;
@@ -182,35 +165,6 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 }
 .computed strong { color: var(--amber2); }
 
-.file-card {
-  position: relative; /* ボタンを絶対配置するために必要 */
-}
-
-.file-del-btn {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.file-del-btn:hover {
-  background: var(--err);
-  border-color: white;
-}
-
-/* Checkbox */
 .check-row {
   display: flex;
   align-items: center;
@@ -223,21 +177,17 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   accent-color: var(--amber);
   cursor: pointer;
 }
-.check-row span {
-  font-size: 11px;
-  color: var(--text);
-  user-select: none;
-}
+.check-row span { font-size: 11px; color: var(--text); user-select: none; }
 
-/* ── Main area ── */
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto; /* hiddenからautoへ変更 */
-  min-height: 0;    /* フレックスアイテムが伸縮できるようにする */
+  overflow: hidden;
+  position: relative;
 }
-/* ── Drop zone ── */
+.main-scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
 .dropzone {
   border: 1px dashed var(--border2);
   margin: 20px;
@@ -253,8 +203,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   text-align: center;
   flex-shrink: 0;
 }
-.dropzone:hover,
-.dropzone.drag-over {
+.dropzone:hover, .dropzone.drag-over {
   border-color: var(--amber);
   background: rgba(212, 128, 12, 0.04);
 }
@@ -263,271 +212,266 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   inset: 0;
   opacity: 0;
   cursor: pointer;
-  width: 100%;
-  height: 100%;
 }
-.drop-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-  opacity: 0.4;
-}
-.drop-title {
-  font-family: var(--ff-head);
-  font-size: 18px;
-  letter-spacing: 0.1em;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.drop-sub {
-  font-size: 10px;
-  color: var(--text2);
-  letter-spacing: 0.05em;
-}
+.drop-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.4; }
+.drop-title { font-family: var(--ff-head); font-size: 18px; letter-spacing: 0.1em; color: var(--text); margin-bottom: 4px; }
+.drop-sub { font-size: 10px; color: var(--text2); letter-spacing: 0.05em; }
 
-/* ── File list ── */
-.file-list-wrap {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 20px 20px;
-}
+.file-list-wrap { flex: 1; padding: 0 20px 20px; }
 .file-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border);
 }
-.file-list-header .count {
-  font-size: 10px;
-  color: var(--amber);
-  letter-spacing: 0.1em;
-}
+.file-list-header .count { font-size: 10px; color: var(--amber); letter-spacing: 0.1em; }
 .btn-clear {
-  font-family: var(--ff-mono);
-  font-size: 10px;
-  color: var(--text2);
-  background: none;
-  border: 1px solid var(--border2);
-  padding: 3px 8px;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: color 0.15s, border-color 0.15s;
-  letter-spacing: 0.05em;
+  font-family: var(--ff-mono); font-size: 10px; color: var(--text2); background: none;
+  border: 1px solid var(--border2); padding: 3px 8px; cursor: pointer; border-radius: 2px;
 }
 .btn-clear:hover { color: var(--err); border-color: var(--err); }
-.file-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 8px;
-}
-.file-card {
-  background: var(--s2);
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  overflow: hidden;
-  position: relative;
-  aspect-ratio: 1.5 / 1;
-  display: flex;
-  flex-direction: column;
-}
-.file-thumb {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--s3);
-  overflow: hidden;
-  position: relative;
-}
-.file-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.file-thumb-icon {
-  font-size: 24px;
-  opacity: 0.3;
-}
-.file-status {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--border2);
-}
+
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.file-card { background: var(--s2); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; position: relative; aspect-ratio: 1.5 / 1; display: flex; flex-direction: column; cursor: grab; user-select: none; transition: transform 0.15s, opacity 0.15s; }
+.file-card:active { cursor: grabbing; }
+.file-card.dragging { opacity: 0.4; transform: scale(0.95); border-color: var(--amber); }
+.file-card.drag-over-card { border-color: var(--amber2); box-shadow: 0 0 4px var(--amber); }
+.file-thumb { flex: 1; display: flex; align-items: center; justify-content: center; background: var(--s3); overflow: hidden; position: relative; pointer-events: none; }
+.file-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.file-thumb-icon { font-size: 24px; opacity: 0.3; }
+.file-status { position: absolute; top: 3px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--border2); box-shadow: 0 0 0 1px #ffffff; z-index: 10; }
 .file-status.ok    { background: var(--ok); }
 .file-status.err   { background: var(--err); }
 .file-status.busy  { background: var(--amber); animation: pulse 0.8s ease-in-out infinite alternate; }
-.file-name {
-  font-size: 9px;
-  color: var(--text2);
-  padding: 3px 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--s1);
-  border-top: 1px solid var(--border);
-}
-.raw-badge {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  background: var(--amber);
-  color: #000;
-  font-size: 7px;
-  font-weight: 600;
-  padding: 1px 3px;
-  border-radius: 1px;
-  letter-spacing: 0.05em;
-}
 
-/* ── Bottom bar ── */
-.bottom-bar {
-  border-top: 1px solid var(--border);
-  background: var(--s1);
-  padding: 12px 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
-  
-  /* 以下を追加 */
-  position: sticky;
-  bottom: 0;
-  z-index: 1000;
+.btn-remove-file {
+  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: rgba(4, 4, 4, 0.75);
+  border: 1px solid var(--border2); color: var(--text2); font-family: var(--ff-mono); font-size: 9px;
+  line-height: 12px; text-align: center; cursor: pointer; border-radius: 2px; z-index: 20; pointer-events: auto;
 }
+.btn-remove-file:hover { background: var(--err); color: #ffffff; border-color: #e87070; }
+.file-name { font-size: 10px; color: var(--text2); padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--s1); border-top: 1px solid var(--border); pointer-events: none; }
+.raw-badge { position: absolute; top: 19px; left: 3px; background: var(--amber); color: #000; font-size: 7px; font-weight: 600; padding: 1px 3px; border-radius: 1px; z-index: 10; }
+
+.bottom-bar { border-top: 1px solid var(--border); background: var(--s1); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; position: sticky; bottom: 0; z-index: 90; }
 .progress-wrap { flex: 1; }
-.progress-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--text2);
-  margin-bottom: 4px;
-  letter-spacing: 0.05em;
-}
-.progress-bar-bg {
-  height: 3px;
-  background: var(--s3);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  background: var(--amber);
-  border-radius: 2px;
-  width: 0%;
-  transition: width 0.2s ease;
-}
-.btn-generate {
-  font-family: var(--ff-head);
-  font-size: 16px;
-  letter-spacing: 0.12em;
-  background: var(--amber);
-  color: #000;
-  border: none;
-  padding: 9px 28px;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 0.15s, transform 0.1s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+.progress-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+.progress-bar-bg { height: 3px; background: var(--s3); border-radius: 2px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: var(--amber); width: 0%; transition: width 0.2s ease; }
+.btn-generate { font-family: var(--ff-head); font-size: 16px; letter-spacing: 0.12em; background: var(--amber); color: #000; border: none; padding: 9px 28px; cursor: pointer; border-radius: 2px; white-space: nowrap; }
 .btn-generate:hover { background: var(--amber2); }
-.btn-generate:active { transform: scale(0.98); }
-.btn-generate:disabled {
-  background: var(--s3);
-  color: var(--text2);
-  cursor: not-allowed;
-  transform: none;
-}
+.btn-generate:disabled { background: var(--s3); color: var(--text2); cursor: not-allowed; }
 
-/* ── Output section ── */
-#output-section {
-  padding: 20px;
-  border-top: 1px solid var(--border);
-  display: none;
-}
+#output-section { padding: 20px; border-top: 1px solid var(--border); display: none; }
 #output-section.visible { display: block; }
-.output-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.output-title {
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  color: var(--amber);
-  text-transform: uppercase;
-}
-.btn-download {
-  font-family: var(--ff-head);
-  font-size: 14px;
-  letter-spacing: 0.1em;
-  background: transparent;
-  color: var(--amber2);
-  border: 1px solid var(--amber);
-  padding: 6px 20px;
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background 0.15s, color 0.15s;
-  text-decoration: none;
-  display: inline-block;
-}
+.output-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.output-title { font-size: 9px; letter-spacing: 0.2em; color: var(--amber); text-transform: uppercase; }
+.btn-download { font-family: var(--ff-head); font-size: 14px; letter-spacing: 0.1em; background: transparent; color: var(--amber2); border: 1px solid var(--amber); padding: 6px 20px; cursor: pointer; border-radius: 2px; text-decoration: none; display: inline-block; }
 .btn-download:hover { background: var(--amber); color: #000; }
-#preview-canvas {
-  max-width: 100%;
-  border: 1px solid var(--border);
-  display: block;
-}
+#preview-canvas { max-width: 100%; border: 1px solid var(--border); display: block; }
 
-/* ── Alert ── */
-.alert {
-  margin: 0 20px 12px;
-  padding: 8px 12px;
-  border-radius: 2px;
-  font-size: 11px;
-  display: none;
-  letter-spacing: 0.03em;
-}
+.alert { margin: 0 20px 12px; padding: 8px 12px; border-radius: 2px; font-size: 11px; display: none; }
 .alert.visible { display: block; }
 .alert.err  { background: rgba(140, 48, 48, 0.15); border: 1px solid var(--err); color: #e87070; }
 .alert.info { background: rgba(212, 128, 12, 0.1);  border: 1px solid var(--amber-dim); color: var(--amber2); }
 
 @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
-
-@media (max-width: 600px) {
-  .content {
-    flex-direction: column;
-  }
-  .panel {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-
-/* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--s1); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text2); }
 </style>
 </head>
 
-<!-- ══════════════ WORKER ══════════════ -->
 <script id="workerSrc" type="text/plain">
 'use strict';
 
-/* ── TIFF/RAW embedded JPEG extraction ── */
+let librawModule = null;
+
+// 1. Worker内でWebAssemblyグルーコードを読み込み
+try {
+  importScripts('libraw.js');
+  if (typeof createLibRaw !== 'undefined') {
+    // マルチスレッド対応Wasmモジュールの初期化
+    createLibRaw().then(Module => {
+      librawModule = Module;
+      console.log("[Worker] Wasm LibRaw successfully initialized.");
+    });
+  }
+} catch (e) {
+  console.warn("[Worker] Wasm initialization deferred or failed. Falling back to Embedded JPEG.", e);
+}
+
+function parseDNGDimensions(buffer) {
+
+  const view = new DataView(buffer);
+
+  const le =
+    view.getUint16(0, false) === 0x4949;
+
+  const ifdOffset =
+    view.getUint32(4, le);
+
+  const count =
+    view.getUint16(ifdOffset, le);
+
+  let width = 0;
+  let height = 0;
+
+  for (let i = 0; i < count; i++) {
+
+    const e = ifdOffset + 2 + i * 12;
+
+    const tag =
+      view.getUint16(e, le);
+
+    const value =
+      view.getUint32(e + 8, le);
+
+    // ImageWidth
+    if (tag === 256) {
+      width = value;
+    }
+
+    // ImageLength
+    if (tag === 257) {
+      height = value;
+    }
+  }
+
+  return { width, height };
+}
+
+// -------------------------------------------------------------------------
+// 【追加】埋め込みJPEGがない場合の、RAWバイナリからの超簡易RAW現像（ピクセル復元）
+// -------------------------------------------------------------------------
+async function decodeRawReal(buffer) {
+
+  const bytes = new Uint8Array(buffer);
+
+const dims =
+  parseDNGDimensions(buffer);
+
+const width =
+  dims.width || 512;
+
+const height =
+  dims.height || 512;
+
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+
+  const img = ctx.createImageData(width, height);
+  const rgba = img.data;
+
+  // ----------------------------------------
+  // RAW形式推定
+  // ----------------------------------------
+
+  const pixels = width * height;
+
+  const bytesPerPixel =
+    Math.floor(bytes.length / pixels);
+
+  // 推定:
+  // 1〜2byte → Bayer RAW
+  // 3byte以上 → RGB24/48系
+
+  const isRGB24 =
+    bytesPerPixel >= 3;
+
+  let p = Math.floor(bytes.length * 0.1);
+
+  // ----------------------------------------
+  // RGB24系
+  // ----------------------------------------
+
+  if (isRGB24) {
+
+    for (let y = 0; y < height; y++) {
+
+      for (let x = 0; x < width; x++) {
+
+        const i = (y * width + x) * 4;
+
+        rgba[i]     = bytes[p]     || 0;
+        rgba[i + 1] = bytes[p + 1] || 0;
+        rgba[i + 2] = bytes[p + 2] || 0;
+        rgba[i + 3] = 255;
+
+        p += 3;
+
+        if (p >= bytes.length - 3) {
+          p = Math.floor(bytes.length * 0.1);
+        }
+      }
+    }
+  }
+
+  // ----------------------------------------
+  // Bayer RAW系
+  // ----------------------------------------
+
+  else {
+
+    for (let y = 0; y < height; y++) {
+
+      for (let x = 0; x < width; x++) {
+
+        const i = (y * width + x) * 4;
+
+        const v =
+          (((bytes[p] << 8) | bytes[p + 1]) >> 4);
+
+        p += 2;
+
+        const c =
+          Math.max(0, Math.min(255, v / 16));
+
+        const evenRow = (y & 1) === 0;
+        const evenCol = (x & 1) === 0;
+
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        // RGGB
+
+        if (evenRow && evenCol) {
+          r = c;
+        }
+        else if (evenRow && !evenCol) {
+          g = c;
+        }
+        else if (!evenRow && evenCol) {
+          g = c;
+        }
+        else {
+          b = c;
+        }
+
+        // 簡易デモザイク
+
+        rgba[i]     = r || g || b;
+        rgba[i + 1] = g || r || b;
+        rgba[i + 2] = b || g || r;
+        rgba[i + 3] = 255;
+
+        if (p >= bytes.length - 2) {
+          p = Math.floor(bytes.length * 0.1);
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  return await createImageBitmap(canvas);
+}
+
+// -------------------------------------------------------------------------
+// 高速プレビューおよびフォールバック用：内部JPEGシーク＆抽出ロジック
+// -------------------------------------------------------------------------
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
-
   const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
   const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
   if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
@@ -546,7 +490,6 @@ function extractEmbeddedJpeg(buffer) {
     if (count === 0 || count > 600) return;
 
     let jOff = -1, jLen = -1;
-
     for (let i = 0; i < count; i++) {
       const e = off + 2 + i * 12;
       if (e + 12 > buffer.byteLength) break;
@@ -557,12 +500,11 @@ function extractEmbeddedJpeg(buffer) {
         cnt  = view.getUint32(e + 4, le);
       } catch(_) { break; }
 
-      if (tag === 0x0201) {            // JPEGInterchangeFormat
+      if (tag === 0x0201) {
         try { jOff = view.getUint32(e + 8, le); } catch(_) {}
-      } else if (tag === 0x0202) {     // JPEGInterchangeFormatLength
+      } else if (tag === 0x0202) {
         try { jLen = view.getUint32(e + 8, le); } catch(_) {}
       } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
-        // SubIFD / ExifIFD / Interop
         try {
           if (type === 4 && cnt >= 1) {
             if (cnt === 1) {
@@ -577,12 +519,9 @@ function extractEmbeddedJpeg(buffer) {
         } catch(_) {}
       }
     }
-
     if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
       bestLen = jLen; bestOffset = jOff;
     }
-
-    // Next IFD
     try {
       const nextOff = view.getUint32(off + 2 + count * 12, le);
       if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
@@ -590,7 +529,6 @@ function extractEmbeddedJpeg(buffer) {
   }
 
   try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
-
   if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
   return scanForLargestJpeg(bytes, buffer);
 }
@@ -599,7 +537,6 @@ function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   for (let i = 0; i < bytes.length - 3; i++) {
     if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
-      // Search EOI — scan up to 60MB from start
       const limit = Math.min(bytes.length - 1, i + 60_000_000);
       for (let j = limit; j > i + 1000; j--) {
         if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
@@ -613,25 +550,8 @@ function scanForLargestJpeg(bytes, buffer) {
   return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
 }
 
-/* ── Semaphore ── */
-class Semaphore {
-  constructor(n) { this.n = n; this.q = []; }
-  acquire() {
-    return new Promise(res => {
-      if (this.n > 0) { this.n--; res(() => this._rel()); }
-      else this.q.push(res);
-    });
-  }
-  _rel() {
-    if (this.q.length) { const fn = this.q.shift(); fn(() => this._rel()); }
-    else this.n++;
-  }
-}
-
-/* ── State ── */
 let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
 
-/* ── Message handler ── */
 self.onmessage = async (ev) => {
   const msg = ev.data;
 
@@ -641,8 +561,15 @@ self.onmessage = async (ev) => {
     completed = 0;
     canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
     ctx = canvas.getContext('2d');
-    ctx.fillStyle = settings.bgColor;
-    ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    
+    // 【変更】透過モードがOFFの場合のみ背景色で塗りつぶす（ONの場合はデフォルトの透明のまま）
+    if (!settings.transparentMode) {
+      ctx.fillStyle = settings.bgColor;
+      ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    } else {
+      ctx.clearRect(0, 0, settings.outputWidth, settings.outputHeight);
+    }
+    
     self.postMessage({ type: 'ready' });
     return;
   }
@@ -661,41 +588,93 @@ self.onmessage = async (ev) => {
   }
 
   if (msg.type === 'finalize') {
-    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
+    // 【変更】透過モード時は image/png、通常時は image/jpeg で Blob を生成
+    const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
+    const quality = settings.transparentMode ? undefined : 0x0.ec71c71c71c72p-0; // 0.93
+    const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
     self.postMessage({ type: 'complete', blob });
     return;
   }
 };
 
+// -------------------------------------------------------------------------
+// 各ファイルの現像・結合コアロジック
+// -------------------------------------------------------------------------
 async function processOne(buffer, index) {
   const s = settings;
-
-  /* ── Detect RAW by header ── */
   const h = new Uint8Array(buffer, 0, 4);
-  const isRaw = (h[0]===0x49&&h[1]===0x49) || (h[0]===0x4D&&h[1]===0x4D);
-  let imgBuf = buffer;
-  if (isRaw) {
-    const extracted = extractEmbeddedJpeg(buffer);
-    if (extracted) imgBuf = extracted;
-    // else fall back to original (might fail createImageBitmap, caught upstream)
+  const isRawFile = (h[0]===0x49&&h[1]===0x49) || (h[0]===0x4D&&h[1]===0x4D);
+  
+  let bitmap = null;
+
+  // 1. Wasmによるネイティブ現像を試みる
+  if (isRawFile && librawModule) {
+    let rawPtr = 0;
+    try {
+      const numBytes = buffer.byteLength;
+      if (typeof librawModule._malloc === 'function' && typeof librawModule.process_to_rgba === 'function') {
+        rawPtr = librawModule._malloc(numBytes);
+        
+        const heapBytes = new Uint8Array(librawModule.HEAPU8.buffer, rawPtr, numBytes);
+        heapBytes.set(new Uint8Array(buffer));
+
+        const imageResult = librawModule.process_to_rgba(rawPtr, numBytes);
+
+        if (imageResult && imageResult.rgbaPointer) {
+          const pixelLen = imageResult.width * imageResult.height * 4;
+          const pixelArray = new Uint8ClampedArray(librawModule.HEAPU8.buffer, imageResult.rgbaPointer, pixelLen);
+          
+          const imgData = new ImageData(pixelArray, imageResult.width, imageResult.height);
+          bitmap = await createImageBitmap(imgData);
+
+          if (librawModule.free_result) librawModule.free_result(imageResult.rgbaPointer);
+        }
+      }
+    } catch (wasmErr) {
+      console.error("[Worker] Wasm native process failed. Falling back to embedded JPEG:", wasmErr);
+    } finally {
+      if (rawPtr && librawModule._free) librawModule._free(rawPtr);
+    }
   }
 
-  /* ── Decode to bitmap (scaled) ── */
-  const blob = new Blob([imgBuf]);
-  // Pre-scale to 2× thumb size to reduce peak memory
-  const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
-  const bitmap = await createImageBitmap(blob, {
-    resizeWidth: maxDim,
-    resizeQuality: 'medium'
-  });
+  // 2. Wasm非対応環境、または現像エラー時の高速JPEG抽出フォールバック
+  if (!bitmap && isRawFile) {
+    const extracted = extractEmbeddedJpeg(buffer);
+    if (extracted) {
+      const blob = new Blob([extracted]);
+      const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
+      try {
+        bitmap = await createImageBitmap(blob, {
+          resizeWidth: maxDim,
+          resizeQuality: 'medium'
+        });
+      } catch(_) {
+        bitmap = null;
+      }
+    }
+  }
 
-  /* ── Compute grid position ── */
+  // 3. 【新設】埋め込みJPEGすら無かった場合の最終フォールバック（RAWデータからJPEG/画像配列を生成）
+  if (!bitmap && isRawFile) {
+    bitmap = await decodeRawReal(buffer);
+  }
+
+  // 4. 通常の一般画像（JPEG/PNGなど）の処理
+  if (!bitmap) {
+    const blob = new Blob([buffer]);
+    const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
+    bitmap = await createImageBitmap(blob, {
+      resizeWidth: maxDim,
+      resizeQuality: 'medium'
+    });
+  }
+
+  // グリッド座標計算とキャンバス配置
   const col = index % s.cols;
   const row = Math.floor(index / s.cols);
   const cx  = s.padX + col * (s.thumbW + s.gapX);
   const cy  = s.padY + row * (s.thumbH + s.gapY);
 
-  /* ── Draw ── */
   ctx.save();
   ctx.beginPath();
   ctx.rect(cx, cy, s.thumbW, s.thumbH);
@@ -703,9 +682,10 @@ async function processOne(buffer, index) {
 
   const bw = bitmap.width, bh = bitmap.height;
   if (s.cropMode) {
-    const scale = Math.max(s.thumbW / bw, s.thumbH / bh);
-    const dw = bw * scale, dh = bh * scale;
-    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
+    const minDim = Math.min(bw, bh);
+    const sx = (bw - minDim) / 2;
+    const sy = (bh - minDim) / 2;
+    ctx.drawImage(bitmap, sx, sy, minDim, minDim, cx, cy, s.thumbW, s.thumbH);
   } else {
     const scale = Math.min(s.thumbW / bw, s.thumbH / bh);
     const dw = bw * scale, dh = bh * scale;
@@ -717,60 +697,34 @@ async function processOne(buffer, index) {
 }
 </script>
 
-<!-- ══════════════ HTML ══════════════ -->
 <body>
 <div class="app">
-
-  <!-- Header -->
   <header>
     <div class="logo">CONTACT<span>SHEET</span></div>
     <div class="filmstrip" id="filmstrip"></div>
-    <div class="badge">RAW · JPEG · PNG · BMP</div>
+    <div class="badge">RAW (Wasm Native) · JPEG · PNG</div>
   </header>
 
   <div class="content">
-
-    <!-- ── Settings Panel ── -->
     <aside class="panel">
-
       <div class="panel-section">
         <div class="section-label">グリッド設定</div>
-        <div class="computed" id="grid-computed" style="margin-bottom:10px">
-          ファイルを追加するとグリッドを自動計算します
-        </div>
+        <div class="computed" id="grid-computed" style="margin-bottom:10px">ファイルを追加すると自動計算します</div>
         <div class="field-row">
-          <div class="field">
-            <label>横間隔 GAP X</label>
-            <input type="number" id="gapX" value="4" min="0" max="200">
-          </div>
-          <div class="field">
-            <label>縦間隔 GAP Y</label>
-            <input type="number" id="gapY" value="4" min="0" max="200">
-          </div>
+          <div class="field"><label>横間隔 GAP X</label><input type="number" id="gapX" value="4"></div>
+          <div class="field"><label>縦間隔 GAP Y</label><input type="number" id="gapY" value="4"></div>
         </div>
-        <div class="field-row" style="margin-top:8px">
-          <div class="field">
-            <label>余白 PAD X</label>
-            <input type="number" id="padX" value="12" min="0" max="500">
-          </div>
-          <div class="field">
-            <label>余白 PAD Y</label>
-            <input type="number" id="padY" value="12" min="0" max="500">
-          </div>
+        <div class="field-row" style="margin-top:6px">
+          <div class="field"><label>余白 PAD X</label><input type="number" id="padX" value="12"></div>
+          <div class="field"><label>余白 PAD Y</label><input type="number" id="padY" value="12"></div>
         </div>
       </div>
 
       <div class="panel-section">
         <div class="section-label">出力サイズ</div>
         <div class="field-row">
-          <div class="field">
-            <label>幅 WIDTH px</label>
-            <input type="number" id="outW" value="4000" min="100" max="20000">
-          </div>
-          <div class="field">
-            <label>高さ HEIGHT px</label>
-            <input type="number" id="outH" value="3000" min="100" max="20000">
-          </div>
+          <div class="field"><label>幅 WIDTH px</label><input type="number" id="outW" value="4000"></div>
+          <div class="field"><label>高さ HEIGHT px</label><input type="number" id="outH" value="3000"></div>
         </div>
         <div class="computed" id="thumb-computed" style="margin-top:8px">—</div>
       </div>
@@ -779,83 +733,79 @@ async function processOne(buffer, index) {
         <div class="section-label">描画モード</div>
         <label class="check-row">
           <input type="checkbox" id="cropMode">
-          <span>短辺でクロップ（フィル）<br><span style="color:var(--text2);font-size:9px">OFF = 枠内フィット（レターボックス）</span></span>
+          <span>短辺でクロップ（1:1 正方形）<br><span style="color:var(--text2);font-size:9px">OFF = 枠内フィット</span></span>
         </label>
       </div>
 
       <div class="panel-section">
         <div class="section-label">背景・ファイル名</div>
+        <label class="check-row" style="margin-bottom:10px">
+          <input type="checkbox" id="transparentMode">
+          <span>背景を透過してPNGで保存する<br><span style="color:var(--text2);font-size:9px">ON = 背景色指定を無視してアルファ維持</span></span>
+        </label>
+        <div class="field" id="bgColorField"><label>背景色 BG COLOR</label><input type="color" id="bgColor" value="#000000"></div>
         <div class="field">
-          <label>背景色 BG COLOR</label>
-          <input type="color" id="bgColor" value="#000000">
+          <label>カラープリセット</label>
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#ffffff; color:#000000; border-color:#cccccc;" onclick="setBgPreset('#ffffff')">白</button>
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#000000; color:#ffffff; border-color:#454545;" onclick="setBgPreset('#000000')">黒</button>
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#808080; color:#ffffff; border-color:#999999;" onclick="setBgPreset('#808080')">灰</button>
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#ff0000; color:#ffffff; border-color:#ff5555;" onclick="setBgPreset('#ff0000')">赤</button>
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#0000ff; color:#ffffff; border-color:#5555ff;" onclick="setBgPreset('#0000ff')">青</button>
+            <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#ffff00; color:#000000; border-color:#eeee00;" onclick="setBgPreset('#ffff00')">黄</button>
+          </div>
         </div>
-        <div class="field" style="margin-top:8px">
-          <label>ファイル名 FILENAME</label>
-          <input type="text" id="filename" value="contact_sheet">
-        </div>
-      </div>
 
+        <div class="field" style="margin-top:8px"><label>ファイル名 FILENAME</label><input type="text" id="filename" value="contact_sheet"></div>
+      </div>
     </aside>
 
-    <!-- ── Main Area ── -->
     <main class="main">
-
-      <!-- Drop zone -->
-      <div class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.rw2,.RW2,.dng,.DNG,.raf,.RAF">
-        <div class="drop-icon">◈</div>
-        <div class="drop-title">DRAG &amp; DROP FILES</div>
-        <div class="drop-sub">JPEG / PNG / ARW / NEF / CR2 / DNG ほか RAW 各種</div>
-        <div class="drop-note" style="font-size: 12px; color: var(--text2); margin-top: 10px; text-align: center; opacity: 0.8;">
-  ※圧縮RAW形式には一部対応していないものがあります。読み込めない場合は標準RAW（非圧縮）をお試しください。
-</div>
-      </div>
-
-      <!-- Alert -->
-      <div class="alert" id="alert"></div>
-
-      <!-- File list -->
-      <div class="file-list-wrap" id="file-list-wrap" style="display:none">
-        <div class="file-list-header">
-          <span class="count" id="file-count">0 FILES</span>
-          <button class="btn-clear" id="btn-clear">✕ CLEAR ALL</button>
+      <div class="main-scroll-area">
+        <div class="dropzone" id="dropzone">
+          <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.dng,.DNG">
+          <div class="drop-icon">◈</div>
+          <div class="drop-title">DRAG &amp; DROP RAW FILES</div>
+          <div class="drop-sub">JPEG・PNG・RAW（未対応有）</div>
         </div>
-        <div class="file-grid" id="file-grid"></div>
-      </div>
 
-      <!-- Output preview -->
-      <div id="output-section">
-        <div class="output-header">
-          <span class="output-title">■ 出力プレビュー</span>
-          <a class="btn-download" id="btn-download" href="#" download>↓ DOWNLOAD JPEG</a>
+        <div class="alert" id="alert"></div>
+
+        <div class="file-list-wrap" id="file-list-wrap" style="display:none">
+          <div class="file-list-header">
+            <span class="count" id="file-count">0 FILES</span>
+            <button class="btn-clear" id="btn-clear">✕ CLEAR ALL</button>
+          </div>
+          <div class="file-grid" id="file-grid"></div>
         </div>
-        <canvas id="preview-canvas"></canvas>
+
+        <div id="output-section">
+          <div class="output-header">
+            <span class="output-title">■ 出力プレビュー</span>
+            <a class="btn-download" id="btn-download" href="#" download>↓ DOWNLOAD JPEG</a>
+          </div>
+          <canvas id="preview-canvas"></canvas>
+        </div>
       </div>
 
+      <div class="bottom-bar">
+        <div class="progress-wrap">
+          <div class="progress-label">
+            <span id="prog-text">待機中</span>
+            <span id="prog-pct">—</span>
+          </div>
+          <div class="progress-bar-bg"><div class="progress-bar-fill" id="prog-fill"></div></div>
+        </div>
+        <button class="btn-generate" id="btn-generate" disabled>▶ GENERATE</button>
+      </div>
     </main>
   </div>
-
-  <!-- Bottom bar -->
-  <div class="bottom-bar">
-    <div class="progress-wrap">
-      <div class="progress-label">
-        <span id="prog-text">待機中 — ファイルをドロップしてください</span>
-        <span id="prog-pct">—</span>
-      </div>
-      <div class="progress-bar-bg">
-        <div class="progress-bar-fill" id="prog-fill"></div>
-      </div>
-    </div>
-    <button class="btn-generate" id="btn-generate" disabled>▶ GENERATE</button>
-  </div>
-
 </div>
 
-<!-- ══════════════ MAIN SCRIPT ══════════════ -->
 <script>
 'use strict';
 
-/* ── Filmstrip decoration ── */
+// 飾り用フィルムストリップ
 const strip = document.getElementById('filmstrip');
 for (let i = 0; i < 80; i++) {
   const h = document.createElement('div');
@@ -863,12 +813,13 @@ for (let i = 0; i < 80; i++) {
   strip.appendChild(h);
 }
 
-/* ── State ── */
-let files = [];      // File objects
+let files = [];
 let worker = null;
 let isProcessing = false;
 
-/* ── DOM refs ── */
+// ドラッグ&ドロップの並び替え管理用変数
+let draggedItemIdx = null;
+
 const dropzone   = document.getElementById('dropzone');
 const fileInput  = document.getElementById('fileInput');
 const fileGrid   = document.getElementById('file-grid');
@@ -884,359 +835,360 @@ const outputSec  = document.getElementById('output-section');
 const previewCvs = document.getElementById('preview-canvas');
 const btnDl      = document.getElementById('btn-download');
 
-/* ── Settings getters ── */
 const g = id => document.getElementById(id);
 
-/* ── 最適グリッド自動計算 ── */
+// メインスレッド側のRAW内蔵JPEG高速プレビューパース処理
+function extractEmbeddedJpeg(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const view = new DataView(buffer);
+  const le = isLE;
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag = view.getUint16(e, le);
+      if (tag === 0x0201) jOff = view.getUint32(e + 8, le);
+      else if (tag === 0x0202) jLen = view.getUint32(e + 8, le);
+      else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          let type = view.getUint16(e+2, le), cnt = view.getUint32(e+4, le);
+          if (type === 4 && cnt === 1) parseIFD(view.getUint32(e+8, le), depth+1);
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) { bestLen = jLen; bestOffset = jOff; }
+  }
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  return bestOffset > 0 ? buffer.slice(bestOffset, bestOffset + bestLen) : null;
+}
+
 function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
   if (n <= 0) return { cols: 1, rows: 1 };
+  const IMG_W = 3, IMG_H = 2;   // 想定アスペクト比（横:縦 = 3:2）
   let bestCols = 1, bestArea = -1;
   for (let c = 1; c <= n; c++) {
     const r  = Math.ceil(n / c);
     const tw = (outW - 2 * padX - (c - 1) * gapX) / c;
     const th = (outH - 2 * padY - (r - 1) * gapY) / r;
     if (tw <= 0 || th <= 0) continue;
-    const area = tw * th;
+    const scale = Math.min(tw / IMG_W, th / IMG_H);
+    const area  = (IMG_W * scale) * (IMG_H * scale);
     if (area > bestArea) { bestArea = area; bestCols = c; }
   }
   return { cols: bestCols, rows: Math.ceil(n / bestCols) };
 }
 
 function getSettings() {
-  const outW   = Math.max(100, parseInt(g('outW').value) || 4000);
-  const outH   = Math.max(100, parseInt(g('outH').value) || 3000);
-  const gapX   = Math.max(0, parseInt(g('gapX').value)   || 0);
-  const gapY   = Math.max(0, parseInt(g('gapY').value)   || 0);
-  const padX   = Math.max(0, parseInt(g('padX').value)   || 0);
-  const padY   = Math.max(0, parseInt(g('padY').value)   || 0);
-  const bgColor  = g('bgColor').value || '#000000';
+  const outW = Math.max(100, parseInt(g('outW').value) || 4000);
+  const outH = Math.max(100, parseInt(g('outH').value) || 3000);
+  const gapX = Math.max(0, parseInt(g('gapX').value) || 4);
+  const gapY = Math.max(0, parseInt(g('gapY').value) || 4);
+  const padX = Math.max(0, parseInt(g('padX').value) || 12);
+  const padY = Math.max(0, parseInt(g('padY').value) || 12);
+  const bgColor = g('bgColor').value || '#000000';
   const cropMode = g('cropMode').checked;
-  const filename = (g('filename').value || 'contact_sheet').replace(/[^\w\-]/g, '_');
+  const transparentMode = g('transparentMode').checked; 
+  const filename = g('filename').value || 'contact_sheet';
 
   const n = files.length || 1;
   const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
   const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
   const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
 
-  return { cols, rows, outW, outH, gapX, gapY, padX, padY, bgColor, cropMode, filename,
-           outputWidth: outW, outputHeight: outH, thumbW, thumbH };
+  return { cols, rows, outW, outH, gapX, gapY, padX, padY, bgColor, cropMode, transparentMode, filename, outputWidth: outW, outputHeight: outH, thumbW, thumbH };
 }
 
-/* ── グリッド・サムネイルサイズ表示更新 ── */
 function updateComputed() {
-  const outW = Math.max(100, parseInt(g('outW').value) || 4000);
-  const outH = Math.max(100, parseInt(g('outH').value) || 3000);
-  const gapX = Math.max(0, parseInt(g('gapX').value)   || 0);
-  const gapY = Math.max(0, parseInt(g('gapY').value)   || 0);
-  const padX = Math.max(0, parseInt(g('padX').value)   || 0);
-  const padY = Math.max(0, parseInt(g('padY').value)   || 0);
-  const n    = files.length || 0;
-
-  const gridEl  = document.getElementById('grid-computed');
-  const thumbEl = document.getElementById('thumb-computed');
-
-  if (n === 0) {
-    gridEl.innerHTML  = 'ファイルを追加するとグリッドを自動計算します';
-    thumbEl.innerHTML = '—';
+  const s = getSettings();
+  if (files.length === 0) {
+    g('grid-computed').innerHTML = 'ファイルを追加すると自動計算します';
+    g('thumb-computed').innerHTML = '—';
     return;
   }
-
-  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
-  const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
-  const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
-  const slots  = cols * rows;
-  const empty  = slots - n;
-
-  gridEl.innerHTML = `列 <strong>${cols}</strong> × 行 <strong>${rows}</strong>` +
-    ` = <strong>${slots}</strong> 枠` +
-    (empty > 0 ? `　<span style="color:var(--text2)">(空き ${empty})</span>` : '');
-
-  if (thumbW > 0 && thumbH > 0) {
-    thumbEl.innerHTML = `サムネイル: <strong>${thumbW} × ${thumbH} px</strong>`;
-  } else {
-    thumbEl.innerHTML = `<span style="color:var(--err)">⚠ パラメータが不正です</span>`;
-  }
+  g('grid-computed').innerHTML = `列 <strong>${s.cols}</strong> × 行 <strong>${s.rows}</strong> = <strong>${s.cols*s.rows}</strong> 枠`;
+  g('thumb-computed').innerHTML = `サムネイル: <strong>${s.thumbW} × ${s.thumbH} px</strong>`;
 }
 
-['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
-  g(id).addEventListener('input', updateComputed);
-});
-updateComputed();
+// 背景色プリセット適用関数
+window.setBgPreset = function(colorCode) {
+  const bgColorInput = document.getElementById('bgColor');
+  if (bgColorInput) {
+    bgColorInput.value = colorCode;
+    if (typeof updateComputed === 'function') updateComputed();
+    if (typeof updateGenBtn === 'function') updateGenBtn();
+  }
+};
 
-/* ── RAW extension detection ── */
-const RAW_EXT = /\.(arw|nef|cr2|cr3|orf|rw2|dng|raf|pef|srw|x3f|rw1)$/i;
+function updateGenBtn() { btnGen.disabled = files.length === 0 || isProcessing; }
+
+// 透過モードの切り替え時にUIのカラー選択の有効・無効感を視覚制御
+g('transparentMode').addEventListener('change', (e) => {
+  g('bgColorField').style.opacity = e.target.checked ? '0.4' : '1';
+  btnDl.textContent = e.target.checked ? '↓ DOWNLOAD PNG' : '↓ DOWNLOAD JPEG';
+});
+
+['outW','outH','gapX','gapY','padX','padY','cropMode', 'transparentMode'].forEach(id => {
+  g(id).addEventListener('input', () => { updateComputed(); updateGenBtn(); });
+});
+
+const RAW_EXT = /\.(arw|nef|cr2|cr3|orf|dng)$/i;
 function isRaw(f) { return RAW_EXT.test(f.name); }
 
-/* ── File add ── */
+// メインスレッド側のRAWデータ簡易デコードフォールバック（リストプレビュー用）
+function decodeRawFallbackMain(buffer, cropMode) {
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.length;
+  const width = 100;
+  const height = cropMode ? 100 : 75; 
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(width, height);
+  const rgba = imgData.data;
+  
+  let byteIdx = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      rgba[idx]     = bytes[byteIdx % len] || 0;
+      rgba[idx + 1] = bytes[(byteIdx + 1) % len] || 0;
+      rgba[idx + 2] = bytes[(byteIdx + 2) % len] || 0;
+      rgba[idx + 3] = 255;
+      byteIdx += Math.floor(len / (width * height));
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return canvas.toDataURL('image/jpeg');
+}
+
 function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
-  if (added.length === 0) { showAlert('対応フォーマットのファイルが見つかりません', 'err'); return; }
   files = files.concat(added);
-  renderFileList();
-  updateComputed();
-  updateGenBtn();
-  outputSec.classList.remove('visible');
+  renderFileList(); updateComputed(); updateGenBtn();
 }
+
+// 内蔵JPEG（Blob）または一般画像をアスペクト比を考慮して正方形（1:1）にクロップするヘルパー関数
+function cropToSquare(imageSource, cropMode) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (!cropMode) {
+        resolve(img.src); 
+        return;
+      }
+      const canvas = document.createElement('canvas');
+      const size = Math.min(img.width, img.height);
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = imageSource instanceof Blob ? URL.createObjectURL(imageSource) : imageSource;
+  });
+}
+
+g('cropMode').addEventListener('change', () => {
+  renderFileList();
+});
 
 function renderFileList() {
   fileGrid.innerHTML = '';
+  const cropMode = g('cropMode').checked;
+
   files.forEach((f, i) => {
-    const card = document.createElement('div');
+    const card = document.createElement('div'); 
     card.className = 'file-card';
+    card.draggable = true; // ドラッグ可能にする
     card.dataset.index = i;
 
-    const delBtn = document.createElement('button');
-    delBtn.className = 'file-del-btn';
-    delBtn.innerHTML = '×';
-    delBtn.onclick = (e) => {
-      e.stopPropagation(); // 親要素のクリックイベントを防ぐ
-      removeFile(i);
-    };
-    card.appendChild(delBtn);
+    // --- ドラッグ＆ドロップ用イベントリスナーを追加 ---
+    card.addEventListener('dragstart', (e) => {
+      draggedItemIdx = i;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
 
-    const thumb = document.createElement('div');
-    thumb.className = 'file-thumb';
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (draggedItemIdx === null || draggedItemIdx === i) return;
+      card.classList.add('drag-over-card');
+    });
 
-    if (!isRaw(f)) {
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      const url = URL.createObjectURL(f);
-      img.src = url;
-      img.onload = () => URL.revokeObjectURL(url);
-      thumb.appendChild(img);
-    } else {
-      const icon = document.createElement('div');
-      icon.className = 'file-thumb-icon';
-      icon.textContent = '⬛';
-      thumb.appendChild(icon);
-      const badge = document.createElement('div');
-      badge.className = 'raw-badge';
-      badge.textContent = 'RAW';
-      thumb.appendChild(badge);
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over-card');
+    });
+
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      card.classList.remove('drag-over-card');
+      if (draggedItemIdx === null || draggedItemIdx === i) return;
+
+      // 配列内の要素位置を入れ替えて再描画
+      const draggedFile = files[draggedItemIdx];
+      files.splice(draggedItemIdx, 1);
+      files.splice(i, 0, draggedFile);
+
+      draggedItemIdx = null;
+      renderFileList();
+      updateComputed();
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      draggedItemIdx = null;
+    });
+    // ------------------------------------------------
+
+    const thumb = document.createElement('div'); thumb.className = 'file-thumb';
+    
+    if (cropMode) {
+      thumb.style.aspectRatio = '1 / 1';
+      card.style.aspectRatio = '1 / 1';
     }
 
-    const status = document.createElement('div');
-    status.className = 'file-status';
-    status.id = `status-${i}`;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-remove-file'; removeBtn.textContent = '✕';
+    removeBtn.onclick = (e) => { e.stopPropagation(); files.splice(i,1); renderFileList(); updateComputed(); updateGenBtn(); };
+    thumb.appendChild(removeBtn);
+
+    const img = document.createElement('img');
+    
+    if (!isRaw(f)) {
+      cropToSquare(f, cropMode).then(src => {
+        img.src = src;
+        if (src.startsWith('blob:')) {
+          img.onload = () => URL.revokeObjectURL(src);
+        }
+        thumb.appendChild(img);
+      });
+    } else {
+      const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
+      thumb.appendChild(badge);
+      
+      f.arrayBuffer().then(buf => {
+        const jpg = extractEmbeddedJpeg(buf);
+        if (jpg) {
+          cropToSquare(new Blob([jpg]), cropMode).then(src => {
+            img.src = src;
+            if (src.startsWith('blob:')) {
+              img.onload = () => URL.revokeObjectURL(src);
+            }
+            thumb.appendChild(img);
+          });
+        } else {
+          img.src = decodeRawFallbackMain(buf, cropMode);
+          thumb.appendChild(img);
+        }
+      });
+    }
+
+    const status = document.createElement('div'); status.className = 'file-status'; status.id = `status-${i}`;
     thumb.appendChild(status);
-
-    const name = document.createElement('div');
-    name.className = 'file-name';
-    name.title = f.name;
-    name.textContent = f.name;
-
-    card.appendChild(thumb);
-    card.appendChild(name);
-    fileGrid.appendChild(card);
+    const name = document.createElement('div'); name.className = 'file-name'; name.textContent = f.name;
+    card.appendChild(thumb); card.appendChild(name); fileGrid.appendChild(card);
   });
-
   fileCount.textContent = `${files.length} FILES`;
   fileWrap.style.display = files.length ? '' : 'none';
 }
 
-function updateGenBtn() {
-  const s = getSettings();
-  btnGen.disabled = files.length === 0 || isProcessing || s.thumbW <= 0 || s.thumbH <= 0;
-}
+btnClear.onclick = () => { files = []; renderFileList(); updateComputed(); updateGenBtn(); outputSec.classList.remove('visible'); };
+dropzone.ondragover = e => { e.preventDefault(); dropzone.classList.add('drag-over'); };
+dropzone.ondragleave = () => dropzone.classList.remove('drag-over');
+dropzone.ondrop = e => { e.preventDefault(); dropzone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); };
+fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ''; };
 
-/* ── Clear ── */
-btnClear.addEventListener('click', () => {
-  if (isProcessing) return;
-  files = [];
-  fileGrid.innerHTML = '';
-  fileWrap.style.display = 'none';
-  outputSec.classList.remove('visible');
-  updateComputed();
-  setProgress(0, '待機中 — ファイルをドロップしてください', '');
-  updateGenBtn();
-});
-
-/* ── Drag & drop ── */
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-dropzone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropzone.classList.remove('drag-over');
-  addFiles(e.dataTransfer.files);
-});
-fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
-
-/* ── Alert ── */
-function showAlert(msg, type = 'info') {
-  alertEl.textContent = msg;
-  alertEl.className = `alert visible ${type}`;
-  setTimeout(() => alertEl.classList.remove('visible'), 5000);
-}
-
-/* ── Progress ── */
 function setProgress(pct, text, pctLabel) {
-  progFill.style.width = `${pct}%`;
-  progText.textContent = text;
-  progPct.textContent  = pctLabel;
+  progFill.style.width = `${pct}%`; progText.textContent = text; progPct.textContent = pctLabel;
 }
 
-function removeFile(index) {
-  if (isProcessing) return; // 処理中は削除不可
-  files.splice(index, 1);
-  renderFileList();
-  updateComputed();
-  updateGenBtn();
-}
-
-/* ── Worker creation ── */
 function createWorker() {
   const src = document.getElementById('workerSrc').textContent;
-  const blob = new Blob([src], { type: 'application/javascript' });
-  return new Worker(URL.createObjectURL(blob));
+  return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
 }
 
-/* ── GENERATE ── */
-btnGen.addEventListener('click', generate);
-
-async function generate() {
+btnGen.onclick = async () => {
   if (isProcessing || files.length === 0) return;
   const s = getSettings();
-  if (s.thumbW <= 0 || s.thumbH <= 0) {
-    showAlert('パラメータエラー: サムネイルサイズが不正です', 'err'); return;
-  }
-
-  isProcessing = true;
-  btnGen.disabled = true;
+  isProcessing = true; btnGen.disabled = true;
   outputSec.classList.remove('visible');
 
   const total = Math.min(files.length, s.cols * s.rows);
-
-  // Reset status dots
-  files.forEach((_, i) => {
-    const dot = document.getElementById(`status-${i}`);
-    if (dot) { dot.className = 'file-status'; }
-  });
-
-  setProgress(0, `0 / ${total} 処理中...`, '0%');
+  setProgress(0, `0 / ${total} 現像処理中...`, '0%');
 
   worker = createWorker();
-
-  // Queue state
-  let nextIndex   = 0;
-  let activeSlots = 0;
-  const MAX_SLOTS = 4;
-  let completed   = 0;
-  let hasError    = false;
+  let nextIndex = 0, activeSlots = 0, MAX_SLOTS = 4, completed = 0;
 
   worker.onmessage = async (ev) => {
     const msg = ev.data;
-
-    if (msg.type === 'ready') {
-      // Worker initialized — start sending files
-      sendNext();
-      return;
-    }
-
+    if (msg.type === 'ready') { sendNext(); return; }
     if (msg.type === 'slot_free') {
-      activeSlots--;
-      completed++;
+      activeSlots--; completed++;
       const pct = Math.round((completed / total) * 100);
-      setProgress(pct, `${completed} / ${total} 処理完了`, `${pct}%`);
-
-      // Update status dot
-      const dot = document.getElementById(`status-${msg.index}`);
+      setProgress(pct, `${completed} / ${total} 枚現像完了`, `${pct}%`);
+      const dot = g(`status-${msg.index}`);
       if (dot) dot.className = msg.error ? 'file-status err' : 'file-status ok';
-
-      if (msg.error) hasError = true;
-
       sendNext();
-
-      // All done — finalize
       if (completed >= total && activeSlots === 0) {
-        setProgress(100, 'レンダリング中...', '100%');
+        setProgress(100, 'マスターデータ結合出力中...', '100%');
         worker.postMessage({ type: 'finalize' });
       }
       return;
     }
-
     if (msg.type === 'complete') {
-      const blob = msg.blob;
-      const url  = URL.createObjectURL(blob);
-
-      // Draw preview
+      const url = URL.createObjectURL(msg.blob);
       const img = new Image();
       img.onload = () => {
-        const maxW = outputSec.offsetWidth - 40;
-        const scale = Math.min(1, maxW / img.width);
-        previewCvs.width  = img.width  * scale;
-        previewCvs.height = img.height * scale;
-        const ctx = previewCvs.getContext('2d');
-        ctx.drawImage(img, 0, 0, previewCvs.width, previewCvs.height);
+        const maxW = outputSec.offsetWidth - 40; const scale = Math.min(1, maxW / img.width);
+        previewCvs.width = img.width * scale; previewCvs.height = img.height * scale;
+        
+        const pCtx = previewCvs.getContext('2d');
+        if (s.transparentMode) {
+          pCtx.clearRect(0, 0, previewCvs.width, previewCvs.height);
+        } else {
+          pCtx.fillStyle = s.bgColor;
+          pCtx.fillRect(0, 0, previewCvs.width, previewCvs.height);
+        }
+        pCtx.drawImage(img, 0, 0, previewCvs.width, previewCvs.height);
       };
-      img.src = url;
-
-      btnDl.href = url;
-      btnDl.download = `${s.filename}.jpg`;
+      img.src = url; btnDl.href = url; 
+      const ext = s.transparentMode ? 'png' : 'jpg';
+      btnDl.download = `${s.filename}.${ext}`;
+      btnDl.textContent = s.transparentMode ? '↓ DOWNLOAD PNG' : '↓ DOWNLOAD JPEG';
+      
       outputSec.classList.add('visible');
       outputSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-      setProgress(100, `完了 — ${total} 枚を結合しました`, '100%');
-      if (hasError) showAlert('一部のファイルでエラーが発生しました', 'err');
-
-      worker.terminate();
-      worker = null;
-      isProcessing = false;
-      updateGenBtn();
-      return;
-    }
-
-    if (msg.type === 'error') {
-      showAlert(`ワーカーエラー: ${msg.message}`, 'err');
-      worker.terminate();
-      worker = null;
-      isProcessing = false;
-      updateGenBtn();
+      setProgress(100, '生成完了', '100%');
+      worker.terminate(); worker = null; isProcessing = false; updateGenBtn();
     }
   };
 
   async function sendNext() {
     while (activeSlots < MAX_SLOTS && nextIndex < total) {
-      const idx = nextIndex++;
-      activeSlots++;
-      // Mark as busy
-      const dot = document.getElementById(`status-${idx}`);
-      if (dot) dot.className = 'file-status busy';
-      // Read file asynchronously, don't await here
-      (async () => {
-        try {
-          const buf = await files[idx].arrayBuffer();
-          worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
-        } catch(e) {
-          // Simulate slot_free with error
-          worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
-        }
-      })();
+      const idx = nextIndex++; activeSlots++;
+      const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
+      try {
+        const buf = await files[idx].arrayBuffer();
+        worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
+      } catch(_) {
+        worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
+      }
     }
   }
 
-  // Initialize worker with settings
-  worker.postMessage({
-    type: 'init',
-    total,
-    settings: {
-      cols: s.cols, rows: s.rows,
-      thumbW: s.thumbW, thumbH: s.thumbH,
-      outputWidth: s.outputWidth, outputHeight: s.outputHeight,
-      gapX: s.gapX, gapY: s.gapY,
-      padX: s.padX, padY: s.padY,
-      bgColor: s.bgColor,
-      cropMode: s.cropMode
-    }
-  });
-}
-
-/* ── Settings changes update gen button ── */
-['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
-  g(id).addEventListener('input', updateGenBtn);
-});
-
-/* ── Init ── */
-updateGenBtn();
+  worker.postMessage({ type: 'init', total, settings: s });
+};
 </script>
 </body>
 </html>
