@@ -167,7 +167,6 @@ input[type="color"] {
   padding: 2px 4px;
   cursor: pointer;
 }
-/* Chrome spinner hide */
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 
@@ -183,7 +182,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 .computed strong { color: var(--amber2); }
 
 .file-card {
-  position: relative; /* ボタンを絶対配置するために必要 */
+  position: relative;
 }
 
 .file-del-btn {
@@ -234,8 +233,8 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto; /* hiddenからautoへ変更 */
-  min-height: 0;    /* フレックスアイテムが伸縮できるようにする */
+  overflow-y: auto;
+  min-height: 0;
 }
 /* ── Drop zone ── */
 .dropzone {
@@ -357,6 +356,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   height: 8px;
   border-radius: 50%;
   background: var(--border2);
+  z-index: 15;
 }
 .file-status.ok    { background: var(--ok); }
 .file-status.err   { background: var(--err); }
@@ -374,7 +374,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 .raw-badge {
   position: absolute;
   top: 3px;
-  left: 3px;
+  left: 24px;
   background: var(--amber);
   color: #000;
   font-size: 7px;
@@ -382,6 +382,7 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   padding: 1px 3px;
   border-radius: 1px;
   letter-spacing: 0.05em;
+  z-index: 15;
 }
 
 /* ── Bottom bar ── */
@@ -393,8 +394,6 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
   align-items: center;
   gap: 16px;
   flex-shrink: 0;
-  
-  /* 以下を追加 */
   position: sticky;
   bottom: 0;
   z-index: 1000;
@@ -500,18 +499,10 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
 
 @media (max-width: 600px) {
-  .content {
-    flex-direction: column;
-  }
-  .panel {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
+  .content { flex-direction: column; }
+  .panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
 }
 
-
-/* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--s1); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -519,209 +510,9 @@ input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
 </style>
 </head>
 
-<!-- ══════════════ WORKER ══════════════ -->
-<script id="workerSrc" type="text/plain">
-'use strict';
-
-/* ── TIFF/RAW embedded JPEG extraction ── */
-function extractEmbeddedJpeg(buffer) {
-  const bytes = new Uint8Array(buffer);
-  if (bytes.length < 8) return null;
-
-  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
-  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
-  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
-
-  const view = new DataView(buffer);
-  const le = isLE;
-  const magic = view.getUint16(2, le);
-  if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
-
-  let bestOffset = -1, bestLen = 0;
-
-  function parseIFD(off, depth) {
-    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
-    let count;
-    try { count = view.getUint16(off, le); } catch(e) { return; }
-    if (count === 0 || count > 600) return;
-
-    let jOff = -1, jLen = -1;
-
-    for (let i = 0; i < count; i++) {
-      const e = off + 2 + i * 12;
-      if (e + 12 > buffer.byteLength) break;
-      let tag, type, cnt;
-      try {
-        tag  = view.getUint16(e,     le);
-        type = view.getUint16(e + 2, le);
-        cnt  = view.getUint32(e + 4, le);
-      } catch(_) { break; }
-
-      if (tag === 0x0201) {            // JPEGInterchangeFormat
-        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
-      } else if (tag === 0x0202) {     // JPEGInterchangeFormatLength
-        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
-      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
-        // SubIFD / ExifIFD / Interop
-        try {
-          if (type === 4 && cnt >= 1) {
-            if (cnt === 1) {
-              parseIFD(view.getUint32(e + 8, le), depth + 1);
-            } else {
-              const listOff = view.getUint32(e + 8, le);
-              for (let k = 0; k < Math.min(cnt, 8); k++) {
-                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
-              }
-            }
-          }
-        } catch(_) {}
-      }
-    }
-
-    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
-      bestLen = jLen; bestOffset = jOff;
-    }
-
-    // Next IFD
-    try {
-      const nextOff = view.getUint32(off + 2 + count * 12, le);
-      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
-    } catch(_) {}
-  }
-
-  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
-
-  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
-  return scanForLargestJpeg(bytes, buffer);
-}
-
-function scanForLargestJpeg(bytes, buffer) {
-  let bestOff = -1, bestSize = 0;
-  for (let i = 0; i < bytes.length - 3; i++) {
-    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
-      // Search EOI — scan up to 60MB from start
-      const limit = Math.min(bytes.length - 1, i + 60_000_000);
-      for (let j = limit; j > i + 1000; j--) {
-        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
-          const size = j + 1 - i;
-          if (size > bestSize) { bestSize = size; bestOff = i; }
-          break;
-        }
-      }
-    }
-  }
-  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
-}
-
-/* ── Semaphore ── */
-class Semaphore {
-  constructor(n) { this.n = n; this.q = []; }
-  acquire() {
-    return new Promise(res => {
-      if (this.n > 0) { this.n--; res(() => this._rel()); }
-      else this.q.push(res);
-    });
-  }
-  _rel() {
-    if (this.q.length) { const fn = this.q.shift(); fn(() => this._rel()); }
-    else this.n++;
-  }
-}
-
-/* ── State ── */
-let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
-
-/* ── Message handler ── */
-self.onmessage = async (ev) => {
-  const msg = ev.data;
-
-  if (msg.type === 'init') {
-    settings = msg.settings;
-    total = msg.total;
-    completed = 0;
-    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
-    ctx = canvas.getContext('2d');
-    ctx.fillStyle = settings.bgColor;
-    ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
-    self.postMessage({ type: 'ready' });
-    return;
-  }
-
-  if (msg.type === 'file') {
-    const { buffer, index } = msg;
-    try {
-      await processOne(buffer, index);
-    } catch(e) {
-      self.postMessage({ type: 'slot_free', error: String(e), index });
-      return;
-    }
-    completed++;
-    self.postMessage({ type: 'slot_free', current: completed, total, index });
-    return;
-  }
-
-  if (msg.type === 'finalize') {
-    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
-    self.postMessage({ type: 'complete', blob });
-    return;
-  }
-};
-
-async function processOne(buffer, index) {
-  const s = settings;
-
-  /* ── Detect RAW by header ── */
-  const h = new Uint8Array(buffer, 0, 4);
-  const isRaw = (h[0]===0x49&&h[1]===0x49) || (h[0]===0x4D&&h[1]===0x4D);
-  let imgBuf = buffer;
-  if (isRaw) {
-    const extracted = extractEmbeddedJpeg(buffer);
-    if (extracted) imgBuf = extracted;
-    // else fall back to original (might fail createImageBitmap, caught upstream)
-  }
-
-  /* ── Decode to bitmap (scaled) ── */
-  const blob = new Blob([imgBuf]);
-  // Pre-scale to 2× thumb size to reduce peak memory
-  const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
-  const bitmap = await createImageBitmap(blob, {
-    resizeWidth: maxDim,
-    resizeQuality: 'medium'
-  });
-
-  /* ── Compute grid position ── */
-  const col = index % s.cols;
-  const row = Math.floor(index / s.cols);
-  const cx  = s.padX + col * (s.thumbW + s.gapX);
-  const cy  = s.padY + row * (s.thumbH + s.gapY);
-
-  /* ── Draw ── */
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(cx, cy, s.thumbW, s.thumbH);
-  ctx.clip();
-
-  const bw = bitmap.width, bh = bitmap.height;
-  if (s.cropMode) {
-    const scale = Math.max(s.thumbW / bw, s.thumbH / bh);
-    const dw = bw * scale, dh = bh * scale;
-    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
-  } else {
-    const scale = Math.min(s.thumbW / bw, s.thumbH / bh);
-    const dw = bw * scale, dh = bh * scale;
-    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
-  }
-
-  ctx.restore();
-  bitmap.close();
-}
-</script>
-
-<!-- ══════════════ HTML ══════════════ -->
 <body>
 <div class="app">
 
-  <!-- Header -->
   <header>
     <div class="logo">CONTACT<span>SHEET</span></div>
     <div class="filmstrip" id="filmstrip"></div>
@@ -729,10 +520,7 @@ async function processOne(buffer, index) {
   </header>
 
   <div class="content">
-
-    <!-- ── Settings Panel ── -->
     <aside class="panel">
-
       <div class="panel-section">
         <div class="section-label">グリッド設定</div>
         <div class="computed" id="grid-computed" style="margin-bottom:10px">
@@ -794,27 +582,21 @@ async function processOne(buffer, index) {
           <input type="text" id="filename" value="contact_sheet">
         </div>
       </div>
-
     </aside>
 
-    <!-- ── Main Area ── -->
     <main class="main">
-
-      <!-- Drop zone -->
       <div class="dropzone" id="dropzone">
         <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.rw2,.RW2,.dng,.DNG,.raf,.RAF">
         <div class="drop-icon">◈</div>
         <div class="drop-title">DRAG &amp; DROP FILES</div>
         <div class="drop-sub">JPEG / PNG / ARW / NEF / CR2 / DNG ほか RAW 各種</div>
         <div class="drop-note" style="font-size: 12px; color: var(--text2); margin-top: 10px; text-align: center; opacity: 0.8;">
-  ※圧縮RAW形式には一部対応していないものがあります。読み込めない場合は標準RAW（非圧縮）をお試しください。
-</div>
+          ※圧縮RAW形式には一部対応していないものがあります。読み込めない場合は標準RAW（非圧縮）をお試しください。
+        </div>
       </div>
 
-      <!-- Alert -->
       <div class="alert" id="alert"></div>
 
-      <!-- File list -->
       <div class="file-list-wrap" id="file-list-wrap" style="display:none">
         <div class="file-list-header">
           <span class="count" id="file-count">0 FILES</span>
@@ -823,7 +605,6 @@ async function processOne(buffer, index) {
         <div class="file-grid" id="file-grid"></div>
       </div>
 
-      <!-- Output preview -->
       <div id="output-section">
         <div class="output-header">
           <span class="output-title">■ 出力プレビュー</span>
@@ -831,11 +612,9 @@ async function processOne(buffer, index) {
         </div>
         <canvas id="preview-canvas"></canvas>
       </div>
-
     </main>
   </div>
 
-  <!-- Bottom bar -->
   <div class="bottom-bar">
     <div class="progress-wrap">
       <div class="progress-label">
@@ -848,12 +627,244 @@ async function processOne(buffer, index) {
     </div>
     <button class="btn-generate" id="btn-generate" disabled>▶ GENERATE</button>
   </div>
-
 </div>
 
-<!-- ══════════════ MAIN SCRIPT ══════════════ -->
+<script id="workerSrc" type="text/plain">
+'use strict';
+
+// 共通ロジックをメイン側から文字列注入、または独立させて定義
+let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
+
+// メイン側と全く同じロジックをワーカー内にも定義
+function extractEmbeddedJpeg(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
+  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
+  const view = new DataView(buffer);
+  const le = isLE;
+  const magic = view.getUint16(2, le);
+  if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    if (count === 0 || count > 600) return;
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag, type, cnt;
+      try {
+        tag  = view.getUint16(e,     le);
+        type = view.getUint16(e + 2, le);
+        cnt  = view.getUint32(e + 4, le);
+      } catch(_) { break; }
+      if (tag === 0x0201) {
+        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x0202) {
+        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          if (type === 4 && cnt >= 1) {
+            if (cnt === 1) {
+              parseIFD(view.getUint32(e + 8, le), depth + 1);
+            } else {
+              const listOff = view.getUint32(e + 8, le);
+              for (let k = 0; k < Math.min(cnt, 8); k++) {
+                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
+              }
+            }
+          }
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
+      bestLen = jLen; bestOffset = jOff;
+    }
+    try {
+      const nextOff = view.getUint32(off + 2 + count * 12, le);
+      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
+    } catch(_) {}
+  }
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
+  return scanForLargestJpeg(bytes, buffer);
+}
+
+function scanForLargestJpeg(bytes, buffer) {
+  let bestOff = -1, bestSize = 0;
+  for (let i = 0; i < bytes.length - 3; i++) {
+    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+      const limit = Math.min(bytes.length - 1, i + 60_000_000);
+      for (let j = limit; j > i + 1000; j--) {
+        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
+          const size = j + 1 - i;
+          if (size > bestSize) { bestSize = size; bestOff = i; }
+          break;
+        }
+      }
+    }
+  }
+  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
+}
+
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+  if (msg.type === 'init') {
+    settings = msg.settings;
+    total = msg.total;
+    completed = 0;
+    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
+    ctx = canvas.getContext('2d');
+    ctx.fillStyle = settings.bgColor;
+    ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    self.postMessage({ type: 'ready' });
+    return;
+  }
+  if (msg.type === 'file') {
+    const { buffer, index } = msg;
+    try {
+      await processOne(buffer, index);
+    } catch(e) {
+      self.postMessage({ type: 'slot_free', error: String(e), index });
+      return;
+    }
+    completed++;
+    self.postMessage({ type: 'slot_free', current: completed, total, index });
+    return;
+  }
+  if (msg.type === 'finalize') {
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
+    self.postMessage({ type: 'complete', blob });
+    return;
+  }
+};
+
+async function processOne(buffer, index) {
+  const s = settings;
+  const h = new Uint8Array(buffer, 0, 4);
+  const isRaw = (h[0]===0x49&&h[1]===0x49) || (h[0]===0x4D&&h[1]===0x4D);
+  let imgBuf = buffer;
+  if (isRaw) {
+    const extracted = extractEmbeddedJpeg(buffer);
+    if (extracted) imgBuf = extracted;
+  }
+  const blob = new Blob([imgBuf]);
+  const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
+  const bitmap = await createImageBitmap(blob, {
+    resizeWidth: maxDim,
+    resizeQuality: 'medium'
+  });
+  const col = index % s.cols;
+  const row = Math.floor(index / s.cols);
+  const cx  = s.padX + col * (s.thumbW + s.gapX);
+  const cy  = s.padY + row * (s.thumbH + s.gapY);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cx, cy, s.thumbW, s.thumbH);
+  ctx.clip();
+
+  const bw = bitmap.width, bh = bitmap.height;
+  if (s.cropMode) {
+    const scale = Math.max(s.thumbW / bw, s.thumbH / bh);
+    const dw = bw * scale, dh = bh * scale;
+    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
+  } else {
+    const scale = Math.min(s.thumbW / bw, s.thumbH / bh);
+    const dw = bw * scale, dh = bh * scale;
+    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
+  }
+  ctx.restore();
+  bitmap.close();
+}
+</script>
+
 <script>
 'use strict';
+
+/* ── メインスクリプト側用のRAW埋め込みJPEG抽出ロジック ── */
+function extractEmbeddedJpeg(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
+  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
+  const view = new DataView(buffer);
+  const le = isLE;
+  try {
+    const magic = view.getUint16(2, le);
+    if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
+  } catch(_) { return scanForLargestJpeg(bytes, buffer); }
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    if (count === 0 || count > 600) return;
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag, type, cnt;
+      try {
+        tag  = view.getUint16(e,     le);
+        type = view.getUint16(e + 2, le);
+        cnt  = view.getUint32(e + 4, le);
+      } catch(_) { break; }
+      if (tag === 0x0201) {
+        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x0202) {
+        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          if (type === 4 && cnt >= 1) {
+            if (cnt === 1) {
+              parseIFD(view.getUint32(e + 8, le), depth + 1);
+            } else {
+              const listOff = view.getUint32(e + 8, le);
+              for (let k = 0; k < Math.min(cnt, 8); k++) {
+                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
+              }
+            }
+          }
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
+      bestLen = jLen; bestOffset = jOff;
+    }
+    try {
+      const nextOff = view.getUint32(off + 2 + count * 12, le);
+      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
+    } catch(_) {}
+  }
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
+  return scanForLargestJpeg(bytes, buffer);
+}
+
+function scanForLargestJpeg(bytes, buffer) {
+  let bestOff = -1, bestSize = 0;
+  for (let i = 0; i < bytes.length - 3; i++) {
+    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+      const limit = Math.min(bytes.length - 1, i + 60_000_000);
+      for (let j = limit; j > i + 1000; j--) {
+        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
+          const size = j + 1 - i;
+          if (size > bestSize) { bestSize = size; bestOff = i; }
+          break;
+        }
+      }
+    }
+  }
+  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
+}
 
 /* ── Filmstrip decoration ── */
 const strip = document.getElementById('filmstrip');
@@ -864,7 +875,7 @@ for (let i = 0; i < 80; i++) {
 }
 
 /* ── State ── */
-let files = [];      // File objects
+let files = [];
 let worker = null;
 let isProcessing = false;
 
@@ -884,40 +895,23 @@ const outputSec  = document.getElementById('output-section');
 const previewCvs = document.getElementById('preview-canvas');
 const btnDl      = document.getElementById('btn-download');
 
-/* ── Settings getters ── */
 const g = id => document.getElementById(id);
 
-/* ── 最適グリッド自動計算 ── */
-/* ── 最適グリッド自動計算（面積最大化 ＋ 正方形優先） ── */
 function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
   if (n <= 0) return { cols: 1, rows: 1 };
-  
   let bestCols = 1;
   let bestScore = -1;
-
   for (let c = 1; c <= n; c++) {
     const r = Math.ceil(n / c);
-    
     const tw = (outW - 2 * padX - (c - 1) * gapX) / c;
     const th = (outH - 2 * padY - (r - 1) * gapY) / r;
-
     if (tw <= 0 || th <= 0) continue;
-
     const area = tw * th;
-    
-    // アスペクト比を計算 (正方形であれば比率は1に近い)
     const aspectRatio = tw / th;
-    const squareness = 1 - Math.abs(1 - aspectRatio); // 1に近いほど正方形に近い
-
-    // 面積と正方形スコアを掛け合わせて評価
+    const squareness = 1 - Math.abs(1 - aspectRatio);
     const score = area * squareness;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestCols = c;
-    }
+    if (score > bestScore) { bestScore = score; bestCols = c; }
   }
-  
   return { cols: bestCols, rows: Math.ceil(n / bestCols) };
 }
 
@@ -941,7 +935,6 @@ function getSettings() {
            outputWidth: outW, outputHeight: outH, thumbW, thumbH };
 }
 
-/* ── グリッド・サムネイルサイズ表示更新 ── */
 function updateComputed() {
   const outW = Math.max(100, parseInt(g('outW').value) || 4000);
   const outH = Math.max(100, parseInt(g('outH').value) || 3000);
@@ -968,7 +961,7 @@ function updateComputed() {
 
   gridEl.innerHTML = `列 <strong>${cols}</strong> × 行 <strong>${rows}</strong>` +
     ` = <strong>${slots}</strong> 枠` +
-    (empty > 0 ? `　<span style="color:var(--text2)">(空き ${empty})</span>` : '');
+    (empty > 0 ? ` <span style="color:var(--text2)">(空き ${empty})</span>` : '');
 
   if (thumbW > 0 && thumbH > 0) {
     thumbEl.innerHTML = `サムネイル: <strong>${thumbW} × ${thumbH} px</strong>`;
@@ -982,11 +975,9 @@ function updateComputed() {
 });
 updateComputed();
 
-/* ── RAW extension detection ── */
 const RAW_EXT = /\.(arw|nef|cr2|cr3|orf|rw2|dng|raf|pef|srw|x3f|rw1)$/i;
 function isRaw(f) { return RAW_EXT.test(f.name); }
 
-/* ── File add ── */
 function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
   if (added.length === 0) { showAlert('対応フォーマットのファイルが見つかりません', 'err'); return; }
@@ -997,6 +988,7 @@ function addFiles(newFiles) {
   outputSec.classList.remove('visible');
 }
 
+/* ── ファイル一覧描画（RAWサムネイル対応版） ── */
 function renderFileList() {
   fileGrid.innerHTML = '';
   files.forEach((f, i) => {
@@ -1008,7 +1000,7 @@ function renderFileList() {
     delBtn.className = 'file-del-btn';
     delBtn.innerHTML = '×';
     delBtn.onclick = (e) => {
-      e.stopPropagation(); // 親要素のクリックイベントを防ぐ
+      e.stopPropagation();
       removeFile(i);
     };
     card.appendChild(delBtn);
@@ -1025,33 +1017,29 @@ function renderFileList() {
       img.src = url;
       img.onload = () => URL.revokeObjectURL(url);
     } else {
-      // ── RAWファイルの場合：非同期で埋め込みJPEGを抽出 ──
       const badge = document.createElement('div');
       badge.className = 'raw-badge';
       badge.textContent = 'RAW';
       thumb.appendChild(badge);
 
-      // ファイルを読み込んでJPEGを探す
+      // メイン側で非同期に埋め込みJPEGを取り出しプレビュー
       const reader = new FileReader();
       reader.onload = (e) => {
         const buffer = e.target.result;
-        // Workerにあるのと同じ抽出ロジックを呼び出す
-        const jpegBuffer = extractEmbeddedJpeg(buffer); 
+        const jpegBuffer = extractEmbeddedJpeg(buffer);
         if (jpegBuffer) {
           const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
           const url = URL.createObjectURL(blob);
           img.src = url;
-          // メモリリーク防止（画像読み込み完了後にURLを解放）
-          img.onload = () => URL.revokeObjectURL(url); 
+          img.onload = () => URL.revokeObjectURL(url);
         } else {
-          // 抽出失敗時は黒いアイコン
+          // 万が一抽出に失敗した場合は黒マスアイコン化
           thumb.innerHTML = '<div class="file-thumb-icon">⬛</div>';
           thumb.appendChild(badge);
         }
       };
       reader.readAsArrayBuffer(f);
     }
-    
 
     const status = document.createElement('div');
     status.className = 'file-status';
@@ -1063,7 +1051,6 @@ function renderFileList() {
     name.title = f.name;
     name.textContent = f.name;
 
-    card.appendChild(thumb);
     card.appendChild(name);
     fileGrid.appendChild(card);
   });
@@ -1077,7 +1064,6 @@ function updateGenBtn() {
   btnGen.disabled = files.length === 0 || isProcessing || s.thumbW <= 0 || s.thumbH <= 0;
 }
 
-/* ── Clear ── */
 btnClear.addEventListener('click', () => {
   if (isProcessing) return;
   files = [];
@@ -1089,7 +1075,6 @@ btnClear.addEventListener('click', () => {
   updateGenBtn();
 });
 
-/* ── Drag & drop ── */
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
 dropzone.addEventListener('drop', e => {
@@ -1099,14 +1084,12 @@ dropzone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
-/* ── Alert ── */
 function showAlert(msg, type = 'info') {
   alertEl.textContent = msg;
   alertEl.className = `alert visible ${type}`;
   setTimeout(() => alertEl.classList.remove('visible'), 5000);
 }
 
-/* ── Progress ── */
 function setProgress(pct, text, pctLabel) {
   progFill.style.width = `${pct}%`;
   progText.textContent = text;
@@ -1114,21 +1097,19 @@ function setProgress(pct, text, pctLabel) {
 }
 
 function removeFile(index) {
-  if (isProcessing) return; // 処理中は削除不可
+  if (isProcessing) return;
   files.splice(index, 1);
   renderFileList();
   updateComputed();
   updateGenBtn();
 }
 
-/* ── Worker creation ── */
 function createWorker() {
   const src = document.getElementById('workerSrc').textContent;
   const blob = new Blob([src], { type: 'application/javascript' });
   return new Worker(URL.createObjectURL(blob));
 }
 
-/* ── GENERATE ── */
 btnGen.addEventListener('click', generate);
 
 async function generate() {
@@ -1144,7 +1125,6 @@ async function generate() {
 
   const total = Math.min(files.length, s.cols * s.rows);
 
-  // Reset status dots
   files.forEach((_, i) => {
     const dot = document.getElementById(`status-${i}`);
     if (dot) { dot.className = 'file-status'; }
@@ -1154,7 +1134,6 @@ async function generate() {
 
   worker = createWorker();
 
-  // Queue state
   let nextIndex   = 0;
   let activeSlots = 0;
   const MAX_SLOTS = 4;
@@ -1165,7 +1144,6 @@ async function generate() {
     const msg = ev.data;
 
     if (msg.type === 'ready') {
-      // Worker initialized — start sending files
       sendNext();
       return;
     }
@@ -1176,7 +1154,6 @@ async function generate() {
       const pct = Math.round((completed / total) * 100);
       setProgress(pct, `${completed} / ${total} 処理完了`, `${pct}%`);
 
-      // Update status dot
       const dot = document.getElementById(`status-${msg.index}`);
       if (dot) dot.className = msg.error ? 'file-status err' : 'file-status ok';
 
@@ -1184,7 +1161,6 @@ async function generate() {
 
       sendNext();
 
-      // All done — finalize
       if (completed >= total && activeSlots === 0) {
         setProgress(100, 'レンダリング中...', '100%');
         worker.postMessage({ type: 'finalize' });
@@ -1196,7 +1172,6 @@ async function generate() {
       const blob = msg.blob;
       const url  = URL.createObjectURL(blob);
 
-      // Draw preview
       const img = new Image();
       img.onload = () => {
         const maxW = outputSec.offsetWidth - 40;
@@ -1236,23 +1211,19 @@ async function generate() {
     while (activeSlots < MAX_SLOTS && nextIndex < total) {
       const idx = nextIndex++;
       activeSlots++;
-      // Mark as busy
       const dot = document.getElementById(`status-${idx}`);
       if (dot) dot.className = 'file-status busy';
-      // Read file asynchronously, don't await here
       (async () => {
         try {
           const buf = await files[idx].arrayBuffer();
           worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
         } catch(e) {
-          // Simulate slot_free with error
           worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
         }
       })();
     }
   }
 
-  // Initialize worker with settings
   worker.postMessage({
     type: 'init',
     total,
@@ -1268,12 +1239,10 @@ async function generate() {
   });
 }
 
-/* ── Settings changes update gen button ── */
 ['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
   g(id).addEventListener('input', updateGenBtn);
 });
 
-/* ── Init ── */
 updateGenBtn();
 </script>
 </body>
