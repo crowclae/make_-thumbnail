@@ -152,7 +152,17 @@ input[type="color"] {
 }
 input[type="number"]:focus,
 input[type="text"]:focus { border-color: var(--amber); }
+<<<<<<< HEAD
 input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
+=======
+input[type="color"] {
+  height: 30px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { opacity: 0.3; }
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 
 .computed {
   font-size: 11px;
@@ -165,6 +175,38 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
 }
 .computed strong { color: var(--amber2); }
 
+<<<<<<< HEAD
+=======
+.file-card {
+  position: relative;
+}
+
+.file-del-btn {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-del-btn:hover {
+  background: var(--err);
+  border-color: white;
+}
+
+/* Checkbox */
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 .check-row {
   display: flex;
   align-items: center;
@@ -183,8 +225,13 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
   flex: 1;
   display: flex;
   flex-direction: column;
+<<<<<<< HEAD
   overflow: hidden;
   position: relative;
+=======
+  overflow-y: auto;
+  min-height: 0;
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 }
 .main-scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 
@@ -228,6 +275,7 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
   border: 1px solid var(--border2); padding: 3px 8px; cursor: pointer; border-radius: 2px;
 }
 .btn-clear:hover { color: var(--err); border-color: var(--err); }
+<<<<<<< HEAD
 
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
 .file-card { background: var(--s2); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; position: relative; aspect-ratio: 1.5 / 1; display: flex; flex-direction: column; cursor: grab; user-select: none; transition: transform 0.15s, opacity 0.15s; }
@@ -246,6 +294,90 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
   position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; background: rgba(4, 4, 4, 0.75);
   border: 1px solid var(--border2); color: var(--text2); font-family: var(--ff-mono); font-size: 9px;
   line-height: 12px; text-align: center; cursor: pointer; border-radius: 2px; z-index: 20; pointer-events: auto;
+=======
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.file-card {
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  aspect-ratio: 1.5 / 1;
+  display: flex;
+  flex-direction: column;
+}
+.file-thumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--s3);
+  overflow: hidden;
+  position: relative;
+}
+.file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.file-thumb-icon {
+  font-size: 24px;
+  opacity: 0.3;
+}
+.file-status {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border2);
+  z-index: 15;
+}
+.file-status.ok    { background: var(--ok); }
+.file-status.err   { background: var(--err); }
+.file-status.busy  { background: var(--amber); animation: pulse 0.8s ease-in-out infinite alternate; }
+.file-name {
+  font-size: 9px;
+  color: var(--text2);
+  padding: 3px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--s1);
+  border-top: 1px solid var(--border);
+}
+.raw-badge {
+  position: absolute;
+  top: 3px;
+  left: 24px;
+  background: var(--amber);
+  color: #000;
+  font-size: 7px;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 1px;
+  letter-spacing: 0.05em;
+  z-index: 15;
+}
+
+/* ── Bottom bar ── */
+.bottom-bar {
+  border-top: 1px solid var(--border);
+  background: var(--s1);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 1000;
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 }
 .btn-remove-file:hover { background: var(--err); color: #ffffff; border-color: #e87070; }
 .file-name { font-size: 10px; color: var(--text2); padding: 3px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--s1); border-top: 1px solid var(--border); pointer-events: none; }
@@ -274,12 +406,22 @@ input[type="color"] { height: 30px; padding: 2px 4px; cursor: pointer; }
 .alert.info { background: rgba(212, 128, 12, 0.1);  border: 1px solid var(--amber-dim); color: var(--amber2); }
 
 @keyframes pulse { from { opacity: 0.4; } to { opacity: 1; } }
+<<<<<<< HEAD
+=======
+
+@media (max-width: 600px) {
+  .content { flex-direction: column; }
+  .panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: var(--s1); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 </style>
 </head>
 
+<<<<<<< HEAD
 <script id="workerSrc" type="text/plain">
 'use strict';
 
@@ -699,6 +841,11 @@ async function processOne(buffer, index) {
 
 <body>
 <div class="app">
+=======
+<body>
+<div class="app">
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
   <header>
     <div class="logo">CONTACT<span>SHEET</span></div>
     <div class="filmstrip" id="filmstrip"></div>
@@ -755,20 +902,47 @@ async function processOne(buffer, index) {
             <button type="button" class="btn-clear" style="flex:1; padding:4px 0; background:#ffff00; color:#000000; border-color:#eeee00;" onclick="setBgPreset('#ffff00')">黄</button>
           </div>
         </div>
+<<<<<<< HEAD
 
         <div class="field" style="margin-top:8px"><label>ファイル名 FILENAME</label><input type="text" id="filename" value="contact_sheet"></div>
+=======
+        <div class="field" style="margin-top:8px">
+          <label>ファイル名 FILENAME</label>
+          <input type="text" id="filename" value="contact_sheet">
+        </div>
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
       </div>
     </aside>
 
     <main class="main">
+<<<<<<< HEAD
       <div class="main-scroll-area">
         <div class="dropzone" id="dropzone">
           <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.dng,.DNG">
           <div class="drop-icon">◈</div>
           <div class="drop-title">DRAG &amp; DROP RAW FILES</div>
           <div class="drop-sub">JPEG・PNG・RAW（未対応有）</div>
+=======
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.rw2,.RW2,.dng,.DNG,.raf,.RAF">
+        <div class="drop-icon">◈</div>
+        <div class="drop-title">DRAG &amp; DROP FILES</div>
+        <div class="drop-sub">JPEG / PNG / ARW / NEF / CR2 / DNG ほか RAW 各種</div>
+        <div class="drop-note" style="font-size: 12px; color: var(--text2); margin-top: 10px; text-align: center; opacity: 0.8;">
+          ※圧縮RAW形式には一部対応していないものがあります。読み込めない場合は標準RAW（非圧縮）をお試しください。
+        </div>
+      </div>
+
+      <div class="alert" id="alert"></div>
+
+      <div class="file-list-wrap" id="file-list-wrap" style="display:none">
+        <div class="file-list-header">
+          <span class="count" id="file-count">0 FILES</span>
+          <button class="btn-clear" id="btn-clear">✕ CLEAR ALL</button>
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
         </div>
 
+<<<<<<< HEAD
         <div class="alert" id="alert"></div>
 
         <div class="file-list-wrap" id="file-list-wrap" style="display:none">
@@ -785,8 +959,15 @@ async function processOne(buffer, index) {
             <a class="btn-download" id="btn-download" href="#" download>↓ DOWNLOAD JPEG</a>
           </div>
           <canvas id="preview-canvas"></canvas>
+=======
+      <div id="output-section">
+        <div class="output-header">
+          <span class="output-title">■ 出力プレビュー</span>
+          <a class="btn-download" id="btn-download" href="#" download>↓ DOWNLOAD JPEG</a>
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
         </div>
       </div>
+<<<<<<< HEAD
 
       <div class="bottom-bar">
         <div class="progress-wrap">
@@ -806,6 +987,263 @@ async function processOne(buffer, index) {
 'use strict';
 
 // 飾り用フィルムストリップ
+=======
+    </main>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span id="prog-text">待機中 — ファイルをドロップしてください</span>
+        <span id="prog-pct">—</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="prog-fill"></div>
+      </div>
+    </div>
+    <button class="btn-generate" id="btn-generate" disabled>▶ GENERATE</button>
+  </div>
+</div>
+
+<script id="workerSrc" type="text/plain">
+'use strict';
+
+// 共通ロジックをメイン側から文字列注入、または独立させて定義
+let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
+
+// メイン側と全く同じロジックをワーカー内にも定義
+function extractEmbeddedJpeg(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
+  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
+  const view = new DataView(buffer);
+  const le = isLE;
+  const magic = view.getUint16(2, le);
+  if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    if (count === 0 || count > 600) return;
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag, type, cnt;
+      try {
+        tag  = view.getUint16(e,     le);
+        type = view.getUint16(e + 2, le);
+        cnt  = view.getUint32(e + 4, le);
+      } catch(_) { break; }
+      if (tag === 0x0201) {
+        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x0202) {
+        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          if (type === 4 && cnt >= 1) {
+            if (cnt === 1) {
+              parseIFD(view.getUint32(e + 8, le), depth + 1);
+            } else {
+              const listOff = view.getUint32(e + 8, le);
+              for (let k = 0; k < Math.min(cnt, 8); k++) {
+                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
+              }
+            }
+          }
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
+      bestLen = jLen; bestOffset = jOff;
+    }
+    try {
+      const nextOff = view.getUint32(off + 2 + count * 12, le);
+      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
+    } catch(_) {}
+  }
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
+  return scanForLargestJpeg(bytes, buffer);
+}
+
+function scanForLargestJpeg(bytes, buffer) {
+  let bestOff = -1, bestSize = 0;
+  for (let i = 0; i < bytes.length - 3; i++) {
+    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+      const limit = Math.min(bytes.length - 1, i + 60_000_000);
+      for (let j = limit; j > i + 1000; j--) {
+        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
+          const size = j + 1 - i;
+          if (size > bestSize) { bestSize = size; bestOff = i; }
+          break;
+        }
+      }
+    }
+  }
+  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
+}
+
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+  if (msg.type === 'init') {
+    settings = msg.settings;
+    total = msg.total;
+    completed = 0;
+    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
+    ctx = canvas.getContext('2d');
+    ctx.fillStyle = settings.bgColor;
+    ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    self.postMessage({ type: 'ready' });
+    return;
+  }
+  if (msg.type === 'file') {
+    const { buffer, index } = msg;
+    try {
+      await processOne(buffer, index);
+    } catch(e) {
+      self.postMessage({ type: 'slot_free', error: String(e), index });
+      return;
+    }
+    completed++;
+    self.postMessage({ type: 'slot_free', current: completed, total, index });
+    return;
+  }
+  if (msg.type === 'finalize') {
+    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.93 });
+    self.postMessage({ type: 'complete', blob });
+    return;
+  }
+};
+
+async function processOne(buffer, index) {
+  const s = settings;
+  const h = new Uint8Array(buffer, 0, 4);
+  const isRaw = (h[0]===0x49&&h[1]===0x49) || (h[0]===0x4D&&h[1]===0x4D);
+  let imgBuf = buffer;
+  if (isRaw) {
+    const extracted = extractEmbeddedJpeg(buffer);
+    if (extracted) imgBuf = extracted;
+  }
+  const blob = new Blob([imgBuf]);
+  const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
+  const bitmap = await createImageBitmap(blob, {
+    resizeWidth: maxDim,
+    resizeQuality: 'medium'
+  });
+  const col = index % s.cols;
+  const row = Math.floor(index / s.cols);
+  const cx  = s.padX + col * (s.thumbW + s.gapX);
+  const cy  = s.padY + row * (s.thumbH + s.gapY);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(cx, cy, s.thumbW, s.thumbH);
+  ctx.clip();
+
+  const bw = bitmap.width, bh = bitmap.height;
+  if (s.cropMode) {
+    const scale = Math.max(s.thumbW / bw, s.thumbH / bh);
+    const dw = bw * scale, dh = bh * scale;
+    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
+  } else {
+    const scale = Math.min(s.thumbW / bw, s.thumbH / bh);
+    const dw = bw * scale, dh = bh * scale;
+    ctx.drawImage(bitmap, cx + (s.thumbW - dw) / 2, cy + (s.thumbH - dh) / 2, dw, dh);
+  }
+  ctx.restore();
+  bitmap.close();
+}
+</script>
+
+<script>
+'use strict';
+
+/* ── メインスクリプト側用のRAW埋め込みJPEG抽出ロジック ── */
+function extractEmbeddedJpeg(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
+  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
+  const view = new DataView(buffer);
+  const le = isLE;
+  try {
+    const magic = view.getUint16(2, le);
+    if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
+  } catch(_) { return scanForLargestJpeg(bytes, buffer); }
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    if (count === 0 || count > 600) return;
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag, type, cnt;
+      try {
+        tag  = view.getUint16(e,     le);
+        type = view.getUint16(e + 2, le);
+        cnt  = view.getUint32(e + 4, le);
+      } catch(_) { break; }
+      if (tag === 0x0201) {
+        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x0202) {
+        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
+      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          if (type === 4 && cnt >= 1) {
+            if (cnt === 1) {
+              parseIFD(view.getUint32(e + 8, le), depth + 1);
+            } else {
+              const listOff = view.getUint32(e + 8, le);
+              for (let k = 0; k < Math.min(cnt, 8); k++) {
+                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
+              }
+            }
+          }
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
+      bestLen = jLen; bestOffset = jOff;
+    }
+    try {
+      const nextOff = view.getUint32(off + 2 + count * 12, le);
+      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
+    } catch(_) {}
+  }
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
+  return scanForLargestJpeg(bytes, buffer);
+}
+
+function scanForLargestJpeg(bytes, buffer) {
+  let bestOff = -1, bestSize = 0;
+  for (let i = 0; i < bytes.length - 3; i++) {
+    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+      const limit = Math.min(bytes.length - 1, i + 60_000_000);
+      for (let j = limit; j > i + 1000; j--) {
+        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
+          const size = j + 1 - i;
+          if (size > bestSize) { bestSize = size; bestOff = i; }
+          break;
+        }
+      }
+    }
+  }
+  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
+}
+
+/* ── Filmstrip decoration ── */
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 const strip = document.getElementById('filmstrip');
 for (let i = 0; i < 80; i++) {
   const h = document.createElement('div');
@@ -813,6 +1251,10 @@ for (let i = 0; i < 80; i++) {
   strip.appendChild(h);
 }
 
+<<<<<<< HEAD
+=======
+/* ── State ── */
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 let files = [];
 let worker = null;
 let isProcessing = false;
@@ -837,6 +1279,7 @@ const btnDl      = document.getElementById('btn-download');
 
 const g = id => document.getElementById(id);
 
+<<<<<<< HEAD
 // メインスレッド側のRAW内蔵JPEG高速プレビューパース処理
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -874,14 +1317,28 @@ function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
   if (n <= 0) return { cols: 1, rows: 1 };
   const IMG_W = 3, IMG_H = 2;   // 想定アスペクト比（横:縦 = 3:2）
   let bestCols = 1, bestArea = -1;
+=======
+function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
+  if (n <= 0) return { cols: 1, rows: 1 };
+  let bestCols = 1;
+  let bestScore = -1;
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
   for (let c = 1; c <= n; c++) {
-    const r  = Math.ceil(n / c);
+    const r = Math.ceil(n / c);
     const tw = (outW - 2 * padX - (c - 1) * gapX) / c;
     const th = (outH - 2 * padY - (r - 1) * gapY) / r;
     if (tw <= 0 || th <= 0) continue;
+<<<<<<< HEAD
     const scale = Math.min(tw / IMG_W, th / IMG_H);
     const area  = (IMG_W * scale) * (IMG_H * scale);
     if (area > bestArea) { bestArea = area; bestCols = c; }
+=======
+    const area = tw * th;
+    const aspectRatio = tw / th;
+    const squareness = 1 - Math.abs(1 - aspectRatio);
+    const score = area * squareness;
+    if (score > bestScore) { bestScore = score; bestCols = c; }
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
   }
   return { cols: bestCols, rows: Math.ceil(n / bestCols) };
 }
@@ -913,8 +1370,27 @@ function updateComputed() {
     g('thumb-computed').innerHTML = '—';
     return;
   }
+<<<<<<< HEAD
   g('grid-computed').innerHTML = `列 <strong>${s.cols}</strong> × 行 <strong>${s.rows}</strong> = <strong>${s.cols*s.rows}</strong> 枠`;
   g('thumb-computed').innerHTML = `サムネイル: <strong>${s.thumbW} × ${s.thumbH} px</strong>`;
+=======
+
+  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
+  const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
+  const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
+  const slots  = cols * rows;
+  const empty  = slots - n;
+
+  gridEl.innerHTML = `列 <strong>${cols}</strong> × 行 <strong>${rows}</strong>` +
+    ` = <strong>${slots}</strong> 枠` +
+    (empty > 0 ? ` <span style="color:var(--text2)">(空き ${empty})</span>` : '');
+
+  if (thumbW > 0 && thumbH > 0) {
+    thumbEl.innerHTML = `サムネイル: <strong>${thumbW} × ${thumbH} px</strong>`;
+  } else {
+    thumbEl.innerHTML = `<span style="color:var(--err)">⚠ パラメータが不正です</span>`;
+  }
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 }
 
 // 背景色プリセット適用関数
@@ -927,6 +1403,7 @@ window.setBgPreset = function(colorCode) {
   }
 };
 
+<<<<<<< HEAD
 function updateGenBtn() { btnGen.disabled = files.length === 0 || isProcessing; }
 
 // 透過モードの切り替え時にUIのカラー選択の有効・無効感を視覚制御
@@ -970,12 +1447,18 @@ function decodeRawFallbackMain(buffer, cropMode) {
   return canvas.toDataURL('image/jpeg');
 }
 
+=======
+const RAW_EXT = /\.(arw|nef|cr2|cr3|orf|rw2|dng|raf|pef|srw|x3f|rw1)$/i;
+function isRaw(f) { return RAW_EXT.test(f.name); }
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
   files = files.concat(added);
   renderFileList(); updateComputed(); updateGenBtn();
 }
 
+<<<<<<< HEAD
 // 内蔵JPEG（Blob）または一般画像をアスペクト比を考慮して正方形（1:1）にクロップするヘルパー関数
 function cropToSquare(imageSource, cropMode) {
   return new Promise((resolve) => {
@@ -1003,6 +1486,9 @@ g('cropMode').addEventListener('change', () => {
   renderFileList();
 });
 
+=======
+/* ── ファイル一覧描画（RAWサムネイル対応版） ── */
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 function renderFileList() {
   fileGrid.innerHTML = '';
   const cropMode = g('cropMode').checked;
@@ -1013,12 +1499,23 @@ function renderFileList() {
     card.draggable = true; // ドラッグ可能にする
     card.dataset.index = i;
 
+<<<<<<< HEAD
     // --- ドラッグ＆ドロップ用イベントリスナーを追加 ---
     card.addEventListener('dragstart', (e) => {
       draggedItemIdx = i;
       card.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
     });
+=======
+    const delBtn = document.createElement('button');
+    delBtn.className = 'file-del-btn';
+    delBtn.innerHTML = '×';
+    delBtn.onclick = (e) => {
+      e.stopPropagation();
+      removeFile(i);
+    };
+    card.appendChild(delBtn);
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 
     card.addEventListener('dragover', (e) => {
       e.preventDefault();
@@ -1026,6 +1523,7 @@ function renderFileList() {
       card.classList.add('drag-over-card');
     });
 
+<<<<<<< HEAD
     card.addEventListener('dragleave', () => {
       card.classList.remove('drag-over-card');
     });
@@ -1056,6 +1554,39 @@ function renderFileList() {
     if (cropMode) {
       thumb.style.aspectRatio = '1 / 1';
       card.style.aspectRatio = '1 / 1';
+=======
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    thumb.appendChild(img);
+
+    if (!isRaw(f)) {
+      const url = URL.createObjectURL(f);
+      img.src = url;
+      img.onload = () => URL.revokeObjectURL(url);
+    } else {
+      const badge = document.createElement('div');
+      badge.className = 'raw-badge';
+      badge.textContent = 'RAW';
+      thumb.appendChild(badge);
+
+      // メイン側で非同期に埋め込みJPEGを取り出しプレビュー
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const buffer = e.target.result;
+        const jpegBuffer = extractEmbeddedJpeg(buffer);
+        if (jpegBuffer) {
+          const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          img.src = url;
+          img.onload = () => URL.revokeObjectURL(url);
+        } else {
+          // 万が一抽出に失敗した場合は黒マスアイコン化
+          thumb.innerHTML = '<div class="file-thumb-icon">⬛</div>';
+          thumb.appendChild(badge);
+        }
+      };
+      reader.readAsArrayBuffer(f);
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
     }
 
     const removeBtn = document.createElement('button');
@@ -1096,8 +1627,19 @@ function renderFileList() {
 
     const status = document.createElement('div'); status.className = 'file-status'; status.id = `status-${i}`;
     thumb.appendChild(status);
+<<<<<<< HEAD
     const name = document.createElement('div'); name.className = 'file-name'; name.textContent = f.name;
     card.appendChild(thumb); card.appendChild(name); fileGrid.appendChild(card);
+=======
+
+    const name = document.createElement('div');
+    name.className = 'file-name';
+    name.title = f.name;
+    name.textContent = f.name;
+
+    card.appendChild(name);
+    fileGrid.appendChild(card);
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
   });
   fileCount.textContent = `${files.length} FILES`;
   fileWrap.style.display = files.length ? '' : 'none';
@@ -1109,22 +1651,69 @@ dropzone.ondragleave = () => dropzone.classList.remove('drag-over');
 dropzone.ondrop = e => { e.preventDefault(); dropzone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); };
 fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value = ''; };
 
+<<<<<<< HEAD
+=======
+btnClear.addEventListener('click', () => {
+  if (isProcessing) return;
+  files = [];
+  fileGrid.innerHTML = '';
+  fileWrap.style.display = 'none';
+  outputSec.classList.remove('visible');
+  updateComputed();
+  setProgress(0, '待機中 — ファイルをドロップしてください', '');
+  updateGenBtn();
+});
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag-over');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+function showAlert(msg, type = 'info') {
+  alertEl.textContent = msg;
+  alertEl.className = `alert visible ${type}`;
+  setTimeout(() => alertEl.classList.remove('visible'), 5000);
+}
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 function setProgress(pct, text, pctLabel) {
   progFill.style.width = `${pct}%`; progText.textContent = text; progPct.textContent = pctLabel;
 }
 
+<<<<<<< HEAD
+=======
+function removeFile(index) {
+  if (isProcessing) return;
+  files.splice(index, 1);
+  renderFileList();
+  updateComputed();
+  updateGenBtn();
+}
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 function createWorker() {
   const src = document.getElementById('workerSrc').textContent;
   return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
 }
 
+<<<<<<< HEAD
 btnGen.onclick = async () => {
+=======
+btnGen.addEventListener('click', generate);
+
+async function generate() {
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
   if (isProcessing || files.length === 0) return;
   const s = getSettings();
   isProcessing = true; btnGen.disabled = true;
   outputSec.classList.remove('visible');
 
   const total = Math.min(files.length, s.cols * s.rows);
+<<<<<<< HEAD
   setProgress(0, `0 / ${total} 現像処理中...`, '0%');
 
   worker = createWorker();
@@ -1133,13 +1722,49 @@ btnGen.onclick = async () => {
   worker.onmessage = async (ev) => {
     const msg = ev.data;
     if (msg.type === 'ready') { sendNext(); return; }
+=======
+
+  files.forEach((_, i) => {
+    const dot = document.getElementById(`status-${i}`);
+    if (dot) { dot.className = 'file-status'; }
+  });
+
+  setProgress(0, `0 / ${total} 処理中...`, '0%');
+
+  worker = createWorker();
+
+  let nextIndex   = 0;
+  let activeSlots = 0;
+  const MAX_SLOTS = 4;
+  let completed   = 0;
+  let hasError    = false;
+
+  worker.onmessage = async (ev) => {
+    const msg = ev.data;
+
+    if (msg.type === 'ready') {
+      sendNext();
+      return;
+    }
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
     if (msg.type === 'slot_free') {
       activeSlots--; completed++;
       const pct = Math.round((completed / total) * 100);
+<<<<<<< HEAD
       setProgress(pct, `${completed} / ${total} 枚現像完了`, `${pct}%`);
       const dot = g(`status-${msg.index}`);
+=======
+      setProgress(pct, `${completed} / ${total} 処理完了`, `${pct}%`);
+
+      const dot = document.getElementById(`status-${msg.index}`);
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
       if (dot) dot.className = msg.error ? 'file-status err' : 'file-status ok';
       sendNext();
+<<<<<<< HEAD
+=======
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
       if (completed >= total && activeSlots === 0) {
         setProgress(100, 'マスターデータ結合出力中...', '100%');
         worker.postMessage({ type: 'finalize' });
@@ -1147,7 +1772,13 @@ btnGen.onclick = async () => {
       return;
     }
     if (msg.type === 'complete') {
+<<<<<<< HEAD
       const url = URL.createObjectURL(msg.blob);
+=======
+      const blob = msg.blob;
+      const url  = URL.createObjectURL(blob);
+
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
       const img = new Image();
       img.onload = () => {
         const maxW = outputSec.offsetWidth - 40; const scale = Math.min(1, maxW / img.width);
@@ -1176,6 +1807,7 @@ btnGen.onclick = async () => {
 
   async function sendNext() {
     while (activeSlots < MAX_SLOTS && nextIndex < total) {
+<<<<<<< HEAD
       const idx = nextIndex++; activeSlots++;
       const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
       try {
@@ -1189,6 +1821,43 @@ btnGen.onclick = async () => {
 
   worker.postMessage({ type: 'init', total, settings: s });
 };
+=======
+      const idx = nextIndex++;
+      activeSlots++;
+      const dot = document.getElementById(`status-${idx}`);
+      if (dot) dot.className = 'file-status busy';
+      (async () => {
+        try {
+          const buf = await files[idx].arrayBuffer();
+          worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
+        } catch(e) {
+          worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
+        }
+      })();
+    }
+  }
+
+  worker.postMessage({
+    type: 'init',
+    total,
+    settings: {
+      cols: s.cols, rows: s.rows,
+      thumbW: s.thumbW, thumbH: s.thumbH,
+      outputWidth: s.outputWidth, outputHeight: s.outputHeight,
+      gapX: s.gapX, gapY: s.gapY,
+      padX: s.padX, padY: s.padY,
+      bgColor: s.bgColor,
+      cropMode: s.cropMode
+    }
+  });
+}
+
+['outW','outH','gapX','gapY','padX','padY'].forEach(id => {
+  g(id).addEventListener('input', updateGenBtn);
+});
+
+updateGenBtn();
+>>>>>>> b36c5b53f7d072038083db6528766f0699d86fb8
 </script>
 </body>
 </html>
