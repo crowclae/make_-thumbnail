@@ -1016,23 +1016,42 @@ function renderFileList() {
     const thumb = document.createElement('div');
     thumb.className = 'file-thumb';
 
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    thumb.appendChild(img);
+
     if (!isRaw(f)) {
-      const img = document.createElement('img');
-      img.loading = 'lazy';
       const url = URL.createObjectURL(f);
       img.src = url;
       img.onload = () => URL.revokeObjectURL(url);
-      thumb.appendChild(img);
     } else {
-      const icon = document.createElement('div');
-      icon.className = 'file-thumb-icon';
-      icon.textContent = '⬛';
-      thumb.appendChild(icon);
+      // ── RAWファイルの場合：非同期で埋め込みJPEGを抽出 ──
       const badge = document.createElement('div');
       badge.className = 'raw-badge';
       badge.textContent = 'RAW';
       thumb.appendChild(badge);
+
+      // ファイルを読み込んでJPEGを探す
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const buffer = e.target.result;
+        // Workerにあるのと同じ抽出ロジックを呼び出す
+        const jpegBuffer = extractEmbeddedJpeg(buffer); 
+        if (jpegBuffer) {
+          const blob = new Blob([jpegBuffer], { type: 'image/jpeg' });
+          const url = URL.createObjectURL(blob);
+          img.src = url;
+          // メモリリーク防止（画像読み込み完了後にURLを解放）
+          img.onload = () => URL.revokeObjectURL(url); 
+        } else {
+          // 抽出失敗時は黒いアイコン
+          thumb.innerHTML = '<div class="file-thumb-icon">⬛</div>';
+          thumb.appendChild(badge);
+        }
+      };
+      reader.readAsArrayBuffer(f);
     }
+    
 
     const status = document.createElement('div');
     status.className = 'file-status';
