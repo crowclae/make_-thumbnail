@@ -16,65 +16,21 @@
 'use strict';
 
 let librawModule = null;
-let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
 
-self.onmessage = async (ev) => {
-  const msg = ev.data;
-
-  if (msg.type === 'init') {
-    settings = msg.settings;
-    total = msg.total;
-    completed = 0;
-    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
-    ctx = canvas.getContext('2d');
-    
-    // 【重要】メインスレッドから渡されたベースURLを元に、Wasmを絶対パスで正しくインポート
-    if (msg.baseUrl && !librawModule) {
-      try {
-        const librawUrl = new URL('libraw.js', msg.baseUrl).href;
-        importScripts(librawUrl);
-        if (typeof createLibRaw !== 'undefined') {
-          const Module = await createLibRaw();
-          librawModule = Module;
-          console.log("[Worker] Wasm LibRaw successfully initialized.");
-        }
-      } catch (e) {
-        console.warn("[Worker] Wasm initialization deferred or failed. Falling back to Embedded JPEG.", e);
-      }
-    }
-
-    if (!settings.transparentMode) {
-      ctx.fillStyle = settings.bgColor;
-      ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
-    } else {
-      ctx.clearRect(0, 0, settings.outputWidth, settings.outputHeight);
-    }
-    
-    self.postMessage({ type: 'ready' });
-    return;
+// 1. Worker内でWebAssemblyグルーコードを安全に読み込み
+try {
+  importScripts('libraw.js');
+  if (typeof createLibRaw !== 'undefined') {
+    createLibRaw().then(Module => {
+      librawModule = Module;
+      console.log("[Worker] Wasm LibRaw successfully initialized.");
+    }).catch(err => {
+      console.warn("[Worker] Wasm createLibRaw promise rejected. Fallback ready.", err);
+    });
   }
-
-  if (msg.type === 'file') {
-    const { buffer, index } = msg;
-    try {
-      await processOne(buffer, index);
-    } catch(e) {
-      self.postMessage({ type: 'slot_free', error: String(e), index });
-      return;
-    }
-    completed++;
-    self.postMessage({ type: 'slot_free', current: completed, total, index });
-    return;
-  }
-
-  if (msg.type === 'finalize') {
-    const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
-    const quality = settings.transparentMode ? undefined : 0.93;
-    const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
-    self.postMessage({ type: 'complete', blob });
-    return;
-  }
-};
+} catch (e) {
+  console.warn("[Worker] Wasm initialization deferred or failed. Falling back to Embedded JPEG.", e);
+}
 
 function parseDNGDimensions(buffer) {
   const view = new DataView(buffer);
@@ -99,6 +55,7 @@ function parseDNGDimensions(buffer) {
   }
 }
 
+// 【改良版】CR2(キヤノン)の特殊IFDタグ構造に完全対応した埋め込みJPEGパース
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -127,6 +84,7 @@ function extractEmbeddedJpeg(buffer) {
         cnt = view.getUint32(e + 4, le);
       } catch(_) { break; }
       
+      // CR2/TIFF対応: 0x0201(JPEGInterchangeFormat), 0x0111(StripOffsets) の双方をスキャン
       if (tag === 0x0201 || tag === 0x0111) {
         if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
       } else if (tag === 0x0202 || tag === 0x0117) {
@@ -156,6 +114,7 @@ function extractEmbeddedJpeg(buffer) {
   return scanForLargestJpeg(bytes, buffer);
 }
 
+// 高速セグメントスキップ型シークロジック（フリーズ・砂嵐を完全に防止）
 function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   let i = 0;
@@ -168,7 +127,7 @@ function scanForLargestJpeg(bytes, buffer) {
       while (j < len - 1) {
         if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
           const marker = bytes[j + 1];
-          if (marker === 0xD9) {
+          if (marker === 0xD9) { // End of Image
             const size = j + 2 - start;
             if (size > bestSize) { bestSize = size; bestOff = start; }
             i = j + 2;
@@ -177,7 +136,7 @@ function scanForLargestJpeg(bytes, buffer) {
           } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
             if (j + 3 < len) {
               const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
-              j += 2 + segLen;
+              j += 2 + segLen; // マーカーセグメントをジャンプして高速化
               continue;
             }
           }
@@ -246,6 +205,51 @@ async function decodeRawReal(buffer) {
   ctx.putImageData(img, 0, 0);
   return await createImageBitmap(canvas);
 }
+
+let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
+
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+
+  if (msg.type === 'init') {
+    settings = msg.settings;
+    total = msg.total;
+    completed = 0;
+    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
+    ctx = canvas.getContext('2d');
+    
+    if (!settings.transparentMode) {
+      ctx.fillStyle = settings.bgColor;
+      ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    } else {
+      ctx.clearRect(0, 0, settings.outputWidth, settings.outputHeight);
+    }
+    
+    self.postMessage({ type: 'ready' });
+    return;
+  }
+
+  if (msg.type === 'file') {
+    const { buffer, index } = msg;
+    try {
+      await processOne(buffer, index);
+    } catch(e) {
+      self.postMessage({ type: 'slot_free', error: String(e), index });
+      return;
+    }
+    completed++;
+    self.postMessage({ type: 'slot_free', current: completed, total, index });
+    return;
+  }
+
+  if (msg.type === 'finalize') {
+    const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
+    const quality = settings.transparentMode ? undefined : 0.93;
+    const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
+    self.postMessage({ type: 'complete', blob });
+    return;
+  }
+};
 
 async function processOne(buffer, index) {
   const s = settings;
@@ -450,7 +454,6 @@ for (let i = 0; i < 80; i++) {
   strip.appendChild(h);
 }
 
-// ファイルオブジェクトと、事前ロードしたバッファをペアで保持する構造に変更
 let files = [];
 let worker = null;
 let isProcessing = false;
@@ -473,6 +476,7 @@ const btnDl      = document.getElementById('btn-download');
 
 const g = id => document.getElementById(id);
 
+// メインスレッド側の埋め込みJPEG抽出（Worker側のロジックと完全統一）
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -641,7 +645,6 @@ function isRaw(f) { return RAW_EXT.test(f.name); }
 function decodeRawFallbackMain(buffer, cropMode) {
   const bytes = new Uint8Array(buffer);
   const len = bytes.length;
-  if (len === 0) return '';
   const width = 100;
   const height = cropMode ? 100 : 75; 
   const canvas = document.createElement('canvas');
@@ -666,22 +669,10 @@ function decodeRawFallbackMain(buffer, cropMode) {
   return canvas.toDataURL('image/jpeg');
 }
 
-// ファイル追加時に非同期で一度だけ ArrayBuffer を先読みして確実に配列に保持する
-async function addFiles(newFiles) {
+function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
-  
-  for (const fileObj of added) {
-    try {
-      const buf = await fileObj.arrayBuffer();
-      files.push({ file: fileObj, buffer: buf });
-    } catch (e) {
-      console.error("ファイルの読み込みに失敗しました:", fileObj.name, e);
-    }
-  }
-
-  renderFileList(); 
-  updateComputed(); 
-  updateGenBtn();
+  files = files.concat(added);
+  renderFileList(); updateComputed(); updateGenBtn();
 }
 
 function cropToSquare(imageSource, cropMode) {
@@ -714,10 +705,7 @@ function renderFileList() {
   fileGrid.innerHTML = '';
   const cropMode = g('cropMode').checked;
 
-  files.forEach((item, i) => {
-    const f = item.file;
-    const buf = item.buffer;
-
+  files.forEach((f, i) => {
     const card = document.createElement('div'); 
     card.className = 'file-card';
     card.draggable = true;
@@ -744,9 +732,9 @@ function renderFileList() {
       card.classList.remove('drag-over-card');
       if (draggedItemIdx === null || draggedItemIdx === i) return;
 
-      const draggedItem = files[draggedItemIdx];
+      const draggedFile = files[draggedItemIdx];
       files.splice(draggedItemIdx, 1);
-      files.splice(i, 0, draggedItem);
+      files.splice(i, 0, draggedFile);
 
       draggedItemIdx = null;
       renderFileList();
@@ -783,20 +771,21 @@ function renderFileList() {
       const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
       thumb.appendChild(badge);
       
-      // 先読みしたバッファをそのまま同期的に使ってサムネイル表示
-      const jpg = extractEmbeddedJpeg(buf);
-      if (jpg) {
-        cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
-          img.src = src;
-          if (src.startsWith('blob:')) {
-            img.onload = () => URL.revokeObjectURL(src);
-          }
+      f.arrayBuffer().then(buf => {
+        const jpg = extractEmbeddedJpeg(buf);
+        if (jpg) {
+          cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
+            img.src = src;
+            if (src.startsWith('blob:')) {
+              img.onload = () => URL.revokeObjectURL(src);
+            }
+            thumb.appendChild(img);
+          });
+        } else {
+          img.src = decodeRawFallbackMain(buf, cropMode);
           thumb.appendChild(img);
-        });
-      } else {
-        img.src = decodeRawFallbackMain(buf, cropMode);
-        thumb.appendChild(img);
-      }
+        }
+      });
     }
 
     const status = document.createElement('div'); status.className = 'file-status'; status.id = `status-${i}`;
@@ -883,19 +872,16 @@ btnGen.onclick = async () => {
     while (activeSlots < MAX_SLOTS && nextIndex < total) {
       const idx = nextIndex++; activeSlots++;
       const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
-      
-      const buf = files[idx].buffer;
-      if (buf && buf.byteLength > 0) {
-        // コピー送信にすることで複数回のGENERATE連打にも耐える安全設計に変更
-        worker.postMessage({ type: 'file', buffer: buf, index: idx });
-      } else {
+      try {
+        const buf = await files[idx].arrayBuffer();
+        worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
+      } catch(_) {
         worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
       }
     }
   }
 
-  // メイン画面のベースURLを渡してWorkerを正常初期化させる
-  worker.postMessage({ type: 'init', total, settings: s, baseUrl: window.location.href });
+  worker.postMessage({ type: 'init', total, settings: s });
 };
 </script>
 </body>
