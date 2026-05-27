@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <script src="coi-serviceworker.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-  
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CONTACT SHEET — RAW Generator (Wasm Multi-thread)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,175 +32,31 @@ try {
 }
 
 function parseDNGDimensions(buffer) {
-
   const view = new DataView(buffer);
+  const le = view.getUint16(0, false) === 0x4949;
+  const ifdOffset = view.getUint32(4, le);
+  if (ifdOffset <= 0 || ifdOffset + 2 >= buffer.byteLength) return { width: 0, height: 0 };
+  
+  try {
+    const count = view.getUint16(ifdOffset, le);
+    let width = 0;
+    let height = 0;
 
-  const le =
-    view.getUint16(0, false) === 0x4949;
-
-  const ifdOffset =
-    view.getUint32(4, le);
-
-  const count =
-    view.getUint16(ifdOffset, le);
-
-  let width = 0;
-  let height = 0;
-
-  for (let i = 0; i < count; i++) {
-
-    const e = ifdOffset + 2 + i * 12;
-
-    const tag =
-      view.getUint16(e, le);
-
-    const value =
-      view.getUint32(e + 8, le);
-
-    // ImageWidth
-    if (tag === 256) {
-      width = value;
+    for (let i = 0; i < count; i++) {
+      const e = ifdOffset + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      const tag = view.getUint16(e, le);
+      const value = view.getUint32(e + 8, le);
+      if (tag === 256) width = value;
+      if (tag === 257) height = value;
     }
-
-    // ImageLength
-    if (tag === 257) {
-      height = value;
-    }
+    return { width, height };
+  } catch(_) {
+    return { width: 0, height: 0 };
   }
-
-  return { width, height };
 }
 
-// -------------------------------------------------------------------------
-// 【追加】埋め込みJPEGがない場合の、RAWバイナリからの超簡易RAW現像（ピクセル復元）
-// -------------------------------------------------------------------------
-async function decodeRawReal(buffer) {
-
-  const bytes = new Uint8Array(buffer);
-
-const dims =
-  parseDNGDimensions(buffer);
-
-const width =
-  dims.width || 512;
-
-const height =
-  dims.height || 512;
-
-  const canvas = new OffscreenCanvas(width, height);
-  const ctx = canvas.getContext('2d');
-
-  const img = ctx.createImageData(width, height);
-  const rgba = img.data;
-
-  // ----------------------------------------
-  // RAW形式推定
-  // ----------------------------------------
-
-  const pixels = width * height;
-
-  const bytesPerPixel =
-    Math.floor(bytes.length / pixels);
-
-  // 推定:
-  // 1〜2byte → Bayer RAW
-  // 3byte以上 → RGB24/48系
-
-  const isRGB24 =
-    bytesPerPixel >= 3;
-
-  let p = Math.floor(bytes.length * 0.1);
-
-  // ----------------------------------------
-  // RGB24系
-  // ----------------------------------------
-
-  if (isRGB24) {
-
-    for (let y = 0; y < height; y++) {
-
-      for (let x = 0; x < width; x++) {
-
-        const i = (y * width + x) * 4;
-
-        rgba[i]     = bytes[p]     || 0;
-        rgba[i + 1] = bytes[p + 1] || 0;
-        rgba[i + 2] = bytes[p + 2] || 0;
-        rgba[i + 3] = 255;
-
-        p += 3;
-
-        if (p >= bytes.length - 3) {
-          p = Math.floor(bytes.length * 0.1);
-        }
-      }
-    }
-  }
-
-  // ----------------------------------------
-  // Bayer RAW系
-  // ----------------------------------------
-
-  else {
-
-    for (let y = 0; y < height; y++) {
-
-      for (let x = 0; x < width; x++) {
-
-        const i = (y * width + x) * 4;
-
-        const v =
-          (((bytes[p] << 8) | bytes[p + 1]) >> 4);
-
-        p += 2;
-
-        const c =
-          Math.max(0, Math.min(255, v / 16));
-
-        const evenRow = (y & 1) === 0;
-        const evenCol = (x & 1) === 0;
-
-        let r = 0;
-        let g = 0;
-        let b = 0;
-
-        // RGGB
-
-        if (evenRow && evenCol) {
-          r = c;
-        }
-        else if (evenRow && !evenCol) {
-          g = c;
-        }
-        else if (!evenRow && evenCol) {
-          g = c;
-        }
-        else {
-          b = c;
-        }
-
-        // 簡易デモザイク
-
-        rgba[i]     = r || g || b;
-        rgba[i + 1] = g || r || b;
-        rgba[i + 2] = b || g || r;
-        rgba[i + 3] = 255;
-
-        if (p >= bytes.length - 2) {
-          p = Math.floor(bytes.length * 0.1);
-        }
-      }
-    }
-  }
-
-  ctx.putImageData(img, 0, 0);
-
-  return await createImageBitmap(canvas);
-}
-
-// -------------------------------------------------------------------------
-// 高速プレビューおよびフォールバック用：内部JPEGシーク＆抽出ロジック
-// -------------------------------------------------------------------------
+// 【改良版】高速かつ堅牢な埋め込みJPEGパース（入れ子サムネイルの罠を回避し、CR2の特殊タグに対応）
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -231,7 +85,7 @@ function extractEmbeddedJpeg(buffer) {
         cnt = view.getUint32(e + 4, le);
       } catch(_) { break; }
       
-      // CR2対応: 0x0111(StripOffsets), 0x0117(StripByteCounts) もチェックする
+      // CR2対応: 0x0201(JPEGInterchangeFormat), 0x0111(StripOffsets) の両対応
       if (tag === 0x0201 || tag === 0x0111) {
         if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
       } else if (tag === 0x0202 || tag === 0x0117) {
@@ -250,9 +104,9 @@ function extractEmbeddedJpeg(buffer) {
       if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
     } catch(_) {}
   }
+  
   try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
   
-  // 見つけたオフセットが本当にJPEGの開始(FF D8)か検証
   if (bestOffset > 0 && bestOffset + 2 <= bytes.length) {
     if (bytes[bestOffset] === 0xFF && bytes[bestOffset + 1] === 0xD8) {
       return buffer.slice(bestOffset, bestOffset + bestLen);
@@ -261,10 +115,7 @@ function extractEmbeddedJpeg(buffer) {
   return scanForLargestJpeg(bytes, buffer);
 }
 
-// セグメントスキップ対応の堅牢なJPEGスキャナ（入れ子サムネイルの罠を回避）
-
-
-  
+// 高速セグメントスキップ型JPEGシーク（フリーズを完璧に防止）
 function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   let i = 0;
@@ -277,14 +128,13 @@ function scanForLargestJpeg(bytes, buffer) {
       while (j < len - 1) {
         if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
           const marker = bytes[j + 1];
-          if (marker === 0xD9) { // EOI (End Of Image)
+          if (marker === 0xD9) { // EOI
             const size = j + 2 - start;
             if (size > bestSize) { bestSize = size; bestOff = start; }
             i = j + 2;
             foundEOI = true;
             break;
           } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
-            // セグメント長を持つマーカー（APPn, EXIF等）は中身ごとスキップする
             if (j + 3 < len) {
               const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
               j += 2 + segLen;
@@ -302,6 +152,61 @@ function scanForLargestJpeg(bytes, buffer) {
   return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
 }
 
+async function decodeRawReal(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const dims = parseDNGDimensions(buffer);
+  const width = dims.width || 512;
+  const height = dims.height || 512;
+
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(width, height);
+  const rgba = img.data;
+
+  const pixels = width * height;
+  const bytesPerPixel = Math.floor(bytes.length / pixels);
+  const isRGB24 = bytesPerPixel >= 3;
+  let p = Math.floor(bytes.length * 0.1);
+
+  if (isRGB24) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        rgba[i]     = bytes[p]     || 0;
+        rgba[i + 1] = bytes[p + 1] || 0;
+        rgba[i + 2] = bytes[p + 2] || 0;
+        rgba[i + 3] = 255;
+        p += 3;
+        if (p >= bytes.length - 3) p = Math.floor(bytes.length * 0.1);
+      }
+    }
+  } else {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const v = (((bytes[p] << 8) | bytes[p + 1]) >> 4);
+        p += 2;
+        const c = Math.max(0, Math.min(255, v / 16));
+        const evenRow = (y & 1) === 0;
+        const evenCol = (x & 1) === 0;
+        let r = 0, g = 0, b = 0;
+        if (evenRow && evenCol) r = c;
+        else if (evenRow && !evenCol) g = c;
+        else if (!evenRow && evenCol) g = c;
+        else b = c;
+
+        rgba[i]     = r || g || b;
+        rgba[i + 1] = g || r || b;
+        rgba[i + 2] = b || g || r;
+        rgba[i + 3] = 255;
+        if (p >= bytes.length - 2) p = Math.floor(bytes.length * 0.1);
+      }
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return await createImageBitmap(canvas);
+}
+
 let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
 
 self.onmessage = async (ev) => {
@@ -314,7 +219,6 @@ self.onmessage = async (ev) => {
     canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
     ctx = canvas.getContext('2d');
     
-    // 【変更】透過モードがOFFの場合のみ背景色で塗りつぶす（ONの場合はデフォルトの透明のまま）
     if (!settings.transparentMode) {
       ctx.fillStyle = settings.bgColor;
       ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
@@ -340,18 +244,14 @@ self.onmessage = async (ev) => {
   }
 
   if (msg.type === 'finalize') {
-    // 【変更】透過モード時は image/png、通常時は image/jpeg で Blob を生成
     const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
-    const quality = settings.transparentMode ? undefined : 0x0.ec71c71c71c72p-0; // 0.93
+    const quality = settings.transparentMode ? undefined : 0.93;
     const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
     self.postMessage({ type: 'complete', blob });
     return;
   }
 };
 
-// -------------------------------------------------------------------------
-// 各ファイルの現像・結合コアロジック
-// -------------------------------------------------------------------------
 async function processOne(buffer, index) {
   const s = settings;
   const h = new Uint8Array(buffer, 0, 4);
@@ -359,41 +259,34 @@ async function processOne(buffer, index) {
   
   let bitmap = null;
 
-  // 1. Wasmによるネイティブ現像を試みる
   if (isRawFile && librawModule) {
     let rawPtr = 0;
     try {
       const numBytes = buffer.byteLength;
       if (typeof librawModule._malloc === 'function' && typeof librawModule.process_to_rgba === 'function') {
         rawPtr = librawModule._malloc(numBytes);
-        
         const heapBytes = new Uint8Array(librawModule.HEAPU8.buffer, rawPtr, numBytes);
         heapBytes.set(new Uint8Array(buffer));
 
         const imageResult = librawModule.process_to_rgba(rawPtr, numBytes);
-
         if (imageResult && imageResult.rgbaPointer) {
           const pixelLen = imageResult.width * imageResult.height * 4;
           const pixelArray = new Uint8ClampedArray(librawModule.HEAPU8.buffer, imageResult.rgbaPointer, pixelLen);
-          
           const imgData = new ImageData(pixelArray, imageResult.width, imageResult.height);
           bitmap = await createImageBitmap(imgData);
-
           if (librawModule.free_result) librawModule.free_result(imageResult.rgbaPointer);
         }
       }
     } catch (wasmErr) {
       console.error("[Worker] Wasm native process failed. Falling back to embedded JPEG:", wasmErr);
-    } finally {
+    } {
       if (rawPtr && librawModule._free) librawModule._free(rawPtr);
     }
   }
 
-  // 2. Wasm非対応環境、または現像エラー時の高速JPEG抽出フォールバック
   if (!bitmap && isRawFile) {
     const extracted = extractEmbeddedJpeg(buffer);
     if (extracted) {
-      //const blob = new Blob([extracted]);
       const blob = new Blob([extracted], { type: 'image/jpeg' });
       const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
       try {
@@ -407,9 +300,10 @@ async function processOne(buffer, index) {
     }
   }
 
+  if (!bitmap && isRawFile) {
+    bitmap = await decodeRawReal(buffer);
+  }
 
-
-  // 4. 通常の一般画像（JPEG/PNGなど）の処理
   if (!bitmap) {
     const blob = new Blob([buffer]);
     const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
@@ -419,7 +313,6 @@ async function processOne(buffer, index) {
     });
   }
 
-  // グリッド座標計算とキャンバス配置
   const col = index % s.cols;
   const row = Math.floor(index / s.cols);
   const cx  = s.padX + col * (s.thumbW + s.gapX);
@@ -513,7 +406,7 @@ async function processOne(buffer, index) {
     <main class="main">
       <div class="main-scroll-area">
         <div class="dropzone" id="dropzone">
-          <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.dng,.DNG,.heic,.HEIC,.heif,.HEIF">
+          <input type="file" id="fileInput" multiple accept="image/*,.arw,.ARW,.nef,.NEF,.cr2,.CR2,.cr3,.CR3,.orf,.ORF,.dng,.DNG">
           <div class="drop-icon">◈</div>
           <div class="drop-title">DRAG &amp; DROP RAW FILES</div>
           <div class="drop-sub">JPEG・PNG・RAW（未対応有）</div>
@@ -555,7 +448,6 @@ async function processOne(buffer, index) {
 <script>
 'use strict';
 
-// 飾り用フィルムストリップ
 const strip = document.getElementById('filmstrip');
 for (let i = 0; i < 80; i++) {
   const h = document.createElement('div');
@@ -566,8 +458,6 @@ for (let i = 0; i < 80; i++) {
 let files = [];
 let worker = null;
 let isProcessing = false;
-
-// ドラッグ&ドロップの並び替え管理用変数
 let draggedItemIdx = null;
 
 const dropzone   = document.getElementById('dropzone');
@@ -587,29 +477,93 @@ const btnDl      = document.getElementById('btn-download');
 
 const g = id => document.getElementById(id);
 
-// メインスレッド側のRAW内蔵JPEG高速プレビューパース処理
+// メインスレッド側の埋め込みJPEG抽出ロジック（Worker側と完全統一）
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
-  const len = bytes.length;
+  if (bytes.length < 8) return null;
+  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
+  const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
+  if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
+  
+  const view = new DataView(buffer);
+  const le = isLE;
+  let bestOffset = -1, bestLen = 0;
+
+  function parseIFD(off, depth) {
+    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
+    let count;
+    try { count = view.getUint16(off, le); } catch(e) { return; }
+    if (count === 0 || count > 600) return;
+
+    let jOff = -1, jLen = -1;
+    for (let i = 0; i < count; i++) {
+      const e = off + 2 + i * 12;
+      if (e + 12 > buffer.byteLength) break;
+      let tag, type, cnt;
+      try {
+        tag = view.getUint16(e, le);
+        type = view.getUint16(e + 2, le);
+        cnt = view.getUint32(e + 4, le);
+      } catch(_) { break; }
+      
+      if (tag === 0x0201 || tag === 0x0111) {
+        if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
+      } else if (tag === 0x0202 || tag === 0x0117) {
+        if (cnt === 1) { try { jLen = view.getUint32(e + 8, le); } catch(_) {} }
+      } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
+        try {
+          if (type === 4 && cnt === 1) parseIFD(view.getUint32(e + 8, le), depth + 1);
+        } catch(_) {}
+      }
+    }
+    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) {
+      bestLen = jLen; bestOffset = jOff;
+    }
+    try {
+      const nextOff = view.getUint32(off + 2 + count * 12, le);
+      if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
+    } catch(_) {}
+  }
+  
+  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
+  
+  if (bestOffset > 0 && bestOffset + 2 <= bytes.length) {
+    if (bytes[bestOffset] === 0xFF && bytes[bestOffset + 1] === 0xD8) {
+      return buffer.slice(bestOffset, bestOffset + bestLen);
+    }
+  }
+  return scanForLargestJpeg(bytes, buffer);
+}
+
+function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   let i = 0;
-  
+  const len = bytes.length;
   while (i < len - 1) {
     if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
       const start = i;
-      i += 2;
-      while (i < len - 1) {
-        if (bytes[i] === 0xFF && bytes[i + 1] === 0xD9) {
-          const size = i + 2 - start;
-          if (size > bestSize) {
-            bestSize = size;
-            bestOff = start;
+      let j = i + 2;
+      let foundEOI = false;
+      while (j < len - 1) {
+        if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
+          const marker = bytes[j + 1];
+          if (marker === 0xD9) {
+            const size = j + 2 - start;
+            if (size > bestSize) { bestSize = size; bestOff = start; }
+            i = j + 2;
+            foundEOI = true;
+            break;
+          } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
+            if (j + 3 < len) {
+              const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
+              j += 2 + segLen;
+              continue;
+            }
           }
-          i += 1;
-          break;
         }
-        i++;
+        j++;
       }
+      if (!foundEOI) i++;
     } else {
       i++;
     }
@@ -617,11 +571,8 @@ function extractEmbeddedJpeg(buffer) {
   return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
 }
 
-// 【変更】引数に cropMode を追加
 function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY, cropMode) {
   if (n <= 0) return { cols: 1, rows: 1 };
-  
-  // 【追加】短辺クロップONなら1:1（正方形）、OFFならiPhone標準の4:3をベースにする
   const IMG_W = cropMode ? 1 : 4;
   const IMG_H = cropMode ? 1 : 3;
   
@@ -651,7 +602,6 @@ function getSettings() {
   const filename = g('filename').value || 'contact_sheet';
 
   const n = files.length || 1;
-  // 【変更】末尾の引数に cropMode を追加して引き渡す
   const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY, cropMode);
   const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
   const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
@@ -670,7 +620,6 @@ function updateComputed() {
   g('thumb-computed').innerHTML = `サムネイル: <strong>${s.thumbW} × ${s.thumbH} px</strong>`;
 }
 
-// 背景色プリセット適用関数
 window.setBgPreset = function(colorCode) {
   const bgColorInput = document.getElementById('bgColor');
   if (bgColorInput) {
@@ -682,25 +631,18 @@ window.setBgPreset = function(colorCode) {
 
 function updateGenBtn() { btnGen.disabled = files.length === 0 || isProcessing; }
 
-// 透過モードの切り替え時にUIのカラー選択の有効・無効感を視覚制御
 g('transparentMode').addEventListener('change', (e) => {
   g('bgColorField').style.opacity = e.target.checked ? '0.4' : '1';
   btnDl.textContent = e.target.checked ? '↓ DOWNLOAD PNG' : '↓ DOWNLOAD JPEG';
 });
 
-// 【変更】配列内に 'cropMode' を追加
 ['outW','outH','gapX','gapY','padX','padY','cropMode', 'transparentMode'].forEach(id => {
   g(id).addEventListener('input', () => { updateComputed(); updateGenBtn(); });
 });
 
 const RAW_EXT = /\.(arw|nef|cr2|cr3|orf|dng)$/i;
 function isRaw(f) { return RAW_EXT.test(f.name); }
-// ★HEIC形式を識別するための正規表現（追加）
-const HEIC_EXT = /\.(heic|heif)$/i;
-function isHeic(f) { return HEIC_EXT.test(f.name); }
 
-  
-// メインスレッド側のRAWデータ簡易デコードフォールバック（リストプレビュー用）
 function decodeRawFallbackMain(buffer, cropMode) {
   const bytes = new Uint8Array(buffer);
   const len = bytes.length;
@@ -728,62 +670,12 @@ function decodeRawFallbackMain(buffer, cropMode) {
   return canvas.toDataURL('image/jpeg');
 }
 
-async function addFiles(newFiles) {
-  const validFiles = Array.from(newFiles).filter(f => 
-    f.type.startsWith('image/') || isRaw(f) || isHeic(f)
-  );
-
-  const processedFiles = [];
-
-  // 進行状況表示用（大量のHEICが来た時のフリーズ対策）
-  if (validFiles.some(f => isHeic(f))) {
-    setProgress(0, "HEICファイルを変換中...", "—");
-  }
-  for (let i = 0; i < validFiles.length; i++) {
-    const f = validFiles[i];
-    
-    if (isHeic(f)) {
-      try {
-        // heic2anyでBlob(image/jpeg)に変換
-        const conversionResult = await heic2any({
-          blob: f,
-          toType: "image/jpeg",
-          quality: 0.85
-        });
-
-        // 複数の画像が含まれるケース（マルチフレーム）を考慮
-        const resultBlob = Array.isArray(conversionResult) ? conversionResult[0] : conversionResult;
-        
-        // 拡張子を .jpg に変更した新しいFileオブジェクトを作成
-        const newName = f.name.replace(/\.(heic|heif)$/i, '.jpg');
-        const convertedFile = new File([resultBlob], newName, { type: "image/jpeg" });
-        
-        processedFiles.push(convertedFile);
-      } catch (err) {
-        console.error(`HEIC conversion failed for ${f.name}:`, err);
-        alert(`ファイルの変換に失敗しました: ${f.name}`);
-      }
-    } else {
-      // RAWや通常の画像はそのまま追加
-      processedFiles.push(f);
-    }
-  }
-
-  // 既存のファイル配列と結合
-  files = files.concat(processedFiles);
-  
-  // 画面の更新
-  renderFileList(); 
-  updateComputed(); 
-  updateGenBtn();
-  
-  // 進行状況のテキストをクリア
-  if (validFiles.some(f => isHeic(f))) {
-    setProgress(0, "待機中", "—");
-  }
+function addFiles(newFiles) {
+  const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
+  files = files.concat(added);
+  renderFileList(); updateComputed(); updateGenBtn();
 }
 
-// 内蔵JPEG（Blob）または一般画像をアスペクト比を考慮して正方形（1:1）にクロップするヘルパー関数
 function cropToSquare(imageSource, cropMode) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -817,10 +709,9 @@ function renderFileList() {
   files.forEach((f, i) => {
     const card = document.createElement('div'); 
     card.className = 'file-card';
-    card.draggable = true; // ドラッグ可能にする
+    card.draggable = true;
     card.dataset.index = i;
 
-    // --- ドラッグ＆ドロップ用イベントリスナーを追加 ---
     card.addEventListener('dragstart', (e) => {
       draggedItemIdx = i;
       card.classList.add('dragging');
@@ -842,7 +733,6 @@ function renderFileList() {
       card.classList.remove('drag-over-card');
       if (draggedItemIdx === null || draggedItemIdx === i) return;
 
-      // 配列内の要素位置を入れ替えて再描画
       const draggedFile = files[draggedItemIdx];
       files.splice(draggedItemIdx, 1);
       files.splice(i, 0, draggedFile);
@@ -856,10 +746,8 @@ function renderFileList() {
       card.classList.remove('dragging');
       draggedItemIdx = null;
     });
-    // ------------------------------------------------
 
     const thumb = document.createElement('div'); thumb.className = 'file-thumb';
-    
     if (cropMode) {
       thumb.style.aspectRatio = '1 / 1';
       card.style.aspectRatio = '1 / 1';
@@ -884,11 +772,9 @@ function renderFileList() {
       const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
       thumb.appendChild(badge);
       
-      // ★ ここから差し替え
       f.arrayBuffer().then(buf => {
         const jpg = extractEmbeddedJpeg(buf);
         if (jpg) {
-          //cropToSquare(new Blob([jpg]), cropMode).then(src => {
           cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
             img.src = src;
             if (src.startsWith('blob:')) {
@@ -897,8 +783,7 @@ function renderFileList() {
             thumb.appendChild(img);
           });
         } else {
-          // プレビューが抽出できなかった場合の代替表示（真っ黒などを防ぐためテキスト表示）
-          img.src = 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/><text x="50" y="55" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">NO PREVIEW</text></svg>';
+          img.src = decodeRawFallbackMain(buf, cropMode);
           thumb.appendChild(img);
         }
       });
