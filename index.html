@@ -604,7 +604,7 @@ function extractEmbeddedJpeg(buffer) {
 
 function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
   if (n <= 0) return { cols: 1, rows: 1 };
-  const IMG_W = 3, IMG_H = 2;   // 想定アスペクト比（横:縦 = 3:2）
+  const IMG_W = 1, IMG_H = 1;   // 想定アスペクト比（横:縦 = 1:1）
   let bestCols = 1, bestArea = -1;
   for (let c = 1; c <= n; c++) {
     const r  = Math.ceil(n / c);
