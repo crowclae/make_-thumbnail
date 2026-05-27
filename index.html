@@ -17,14 +17,15 @@
 
 let librawModule = null;
 
-// 1. Worker内でWebAssemblyグルーコードを読み込み
+// 1. Worker内でWebAssemblyグルーコードを安全に読み込み
 try {
   importScripts('libraw.js');
   if (typeof createLibRaw !== 'undefined') {
-    // マルチスレッド対応Wasmモジュールの初期化
     createLibRaw().then(Module => {
       librawModule = Module;
       console.log("[Worker] Wasm LibRaw successfully initialized.");
+    }).catch(err => {
+      console.warn("[Worker] Wasm createLibRaw promise rejected. Fallback ready.", err);
     });
   }
 } catch (e) {
@@ -34,13 +35,11 @@ try {
 function parseDNGDimensions(buffer) {
   const view = new DataView(buffer);
   const le = view.getUint16(0, false) === 0x4949;
-  const ifdOffset = view.getUint32(4, le);
-  if (ifdOffset <= 0 || ifdOffset + 2 >= buffer.byteLength) return { width: 0, height: 0 };
-  
   try {
+    const ifdOffset = view.getUint32(4, le);
+    if (ifdOffset <= 0 || ifdOffset + 2 >= buffer.byteLength) return { width: 0, height: 0 };
     const count = view.getUint16(ifdOffset, le);
-    let width = 0;
-    let height = 0;
+    let width = 0, height = 0;
 
     for (let i = 0; i < count; i++) {
       const e = ifdOffset + 2 + i * 12;
@@ -56,7 +55,7 @@ function parseDNGDimensions(buffer) {
   }
 }
 
-// 【改良版】高速かつ堅牢な埋め込みJPEGパース（入れ子サムネイルの罠を回避し、CR2の特殊タグに対応）
+// 【改良版】CR2(キヤノン)の特殊IFDタグ構造に完全対応した埋め込みJPEGパース
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -85,7 +84,7 @@ function extractEmbeddedJpeg(buffer) {
         cnt = view.getUint32(e + 4, le);
       } catch(_) { break; }
       
-      // CR2対応: 0x0201(JPEGInterchangeFormat), 0x0111(StripOffsets) の両対応
+      // CR2/TIFF対応: 0x0201(JPEGInterchangeFormat), 0x0111(StripOffsets) の双方をスキャン
       if (tag === 0x0201 || tag === 0x0111) {
         if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
       } else if (tag === 0x0202 || tag === 0x0117) {
@@ -115,7 +114,7 @@ function extractEmbeddedJpeg(buffer) {
   return scanForLargestJpeg(bytes, buffer);
 }
 
-// 高速セグメントスキップ型JPEGシーク（フリーズを完璧に防止）
+// 高速セグメントスキップ型シークロジック（フリーズ・砂嵐を完全に防止）
 function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   let i = 0;
@@ -128,7 +127,7 @@ function scanForLargestJpeg(bytes, buffer) {
       while (j < len - 1) {
         if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
           const marker = bytes[j + 1];
-          if (marker === 0xD9) { // EOI
+          if (marker === 0xD9) { // End of Image
             const size = j + 2 - start;
             if (size > bestSize) { bestSize = size; bestOff = start; }
             i = j + 2;
@@ -137,7 +136,7 @@ function scanForLargestJpeg(bytes, buffer) {
           } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
             if (j + 3 < len) {
               const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
-              j += 2 + segLen;
+              j += 2 + segLen; // マーカーセグメントをジャンプして高速化
               continue;
             }
           }
@@ -279,7 +278,7 @@ async function processOne(buffer, index) {
       }
     } catch (wasmErr) {
       console.error("[Worker] Wasm native process failed. Falling back to embedded JPEG:", wasmErr);
-    } {
+    } finally {
       if (rawPtr && librawModule._free) librawModule._free(rawPtr);
     }
   }
@@ -477,7 +476,7 @@ const btnDl      = document.getElementById('btn-download');
 
 const g = id => document.getElementById(id);
 
-// メインスレッド側の埋め込みJPEG抽出ロジック（Worker側と完全統一）
+// メインスレッド側の埋め込みJPEG抽出（Worker側のロジックと完全統一）
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
