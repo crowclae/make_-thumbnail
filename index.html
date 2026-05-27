@@ -267,18 +267,33 @@ function extractEmbeddedJpeg(buffer) {
   return scanForLargestJpeg(bytes, buffer);
 }
 
+
+  
 function scanForLargestJpeg(bytes, buffer) {
+  const len = bytes.length;
   let bestOff = -1, bestSize = 0;
-  for (let i = 0; i < bytes.length - 3; i++) {
-    if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
-      const limit = Math.min(bytes.length - 1, i + 60_000_000);
-      for (let j = limit; j > i + 1000; j--) {
-        if (bytes[j] === 0xD9 && bytes[j-1] === 0xFF) {
-          const size = j + 1 - i;
-          if (size > bestSize) { bestSize = size; bestOff = i; }
+  let i = 0;
+  
+  while (i < len - 1) {
+    // JPEGの開始マーカー (FF D8)
+    if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
+      const start = i;
+      i += 2;
+      // JPEGの終了マーカー (FF D9) を探す
+      while (i < len - 1) {
+        if (bytes[i] === 0xFF && bytes[i + 1] === 0xD9) {
+          const size = i + 2 - start;
+          if (size > bestSize) {
+            bestSize = size;
+            bestOff = start;
+          }
+          i += 1;
           break;
         }
+        i++;
       }
+    } else {
+      i++;
     }
   }
   return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
@@ -388,10 +403,7 @@ async function processOne(buffer, index) {
     }
   }
 
-  // 3. 【新設】埋め込みJPEGすら無かった場合の最終フォールバック（RAWデータからJPEG/画像配列を生成）
-  if (!bitmap && isRawFile) {
-    bitmap = await decodeRawReal(buffer);
-  }
+
 
   // 4. 通常の一般画像（JPEG/PNGなど）の処理
   if (!bitmap) {
@@ -574,34 +586,31 @@ const g = id => document.getElementById(id);
 // メインスレッド側のRAW内蔵JPEG高速プレビューパース処理
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
-  if (bytes.length < 8) return null;
-  const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
-  const view = new DataView(buffer);
-  const le = isLE;
-  let bestOffset = -1, bestLen = 0;
-
-  function parseIFD(off, depth) {
-    if (depth > 8 || off <= 0 || off + 2 >= buffer.byteLength) return;
-    let count;
-    try { count = view.getUint16(off, le); } catch(e) { return; }
-    let jOff = -1, jLen = -1;
-    for (let i = 0; i < count; i++) {
-      const e = off + 2 + i * 12;
-      if (e + 12 > buffer.byteLength) break;
-      let tag = view.getUint16(e, le);
-      if (tag === 0x0201) jOff = view.getUint32(e + 8, le);
-      else if (tag === 0x0202) jLen = view.getUint32(e + 8, le);
-      else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
-        try {
-          let type = view.getUint16(e+2, le), cnt = view.getUint32(e+4, le);
-          if (type === 4 && cnt === 1) parseIFD(view.getUint32(e+8, le), depth+1);
-        } catch(_) {}
+  const len = bytes.length;
+  let bestOff = -1, bestSize = 0;
+  let i = 0;
+  
+  while (i < len - 1) {
+    if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
+      const start = i;
+      i += 2;
+      while (i < len - 1) {
+        if (bytes[i] === 0xFF && bytes[i + 1] === 0xD9) {
+          const size = i + 2 - start;
+          if (size > bestSize) {
+            bestSize = size;
+            bestOff = start;
+          }
+          i += 1;
+          break;
+        }
+        i++;
       }
+    } else {
+      i++;
     }
-    if (jOff > 0 && jLen > 0 && jOff + jLen <= buffer.byteLength && jLen > bestLen) { bestLen = jLen; bestOffset = jOff; }
   }
-  try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
-  return bestOffset > 0 ? buffer.slice(bestOffset, bestOffset + bestLen) : null;
+  return bestOff >= 0 ? buffer.slice(bestOff, bestOff + bestSize) : null;
 }
 
 // 【変更】引数に cropMode を追加
@@ -871,6 +880,7 @@ function renderFileList() {
       const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
       thumb.appendChild(badge);
       
+      // ★ ここから差し替え
       f.arrayBuffer().then(buf => {
         const jpg = extractEmbeddedJpeg(buf);
         if (jpg) {
@@ -882,7 +892,8 @@ function renderFileList() {
             thumb.appendChild(img);
           });
         } else {
-          img.src = decodeRawFallbackMain(buf, cropMode);
+          // プレビューが抽出できなかった場合の代替表示（真っ黒などを防ぐためテキスト表示）
+          img.src = 'data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23333"/><text x="50" y="55" fill="white" font-size="12" text-anchor="middle" font-family="sans-serif">NO PREVIEW</text></svg>';
           thumb.appendChild(img);
         }
       });
