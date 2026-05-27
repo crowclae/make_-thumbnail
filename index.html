@@ -17,7 +17,6 @@
 
 let librawModule = null;
 
-// メインスレッドから渡されたベースURLを元に、Wasmを正しくインポートするよう修正
 self.onmessage = async (ev) => {
   const msg = ev.data;
 
@@ -28,7 +27,7 @@ self.onmessage = async (ev) => {
     canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
     ctx = canvas.getContext('2d');
     
-    // Wasmの初期化をここで行う（ベースURLが取得できるため）
+    // メインスレッドから渡されたベースURLを元に、Wasmを正しくインポート
     if (msg.baseUrl && !librawModule) {
       try {
         const librawUrl = new URL('libraw.js', msg.baseUrl).href;
@@ -452,7 +451,8 @@ for (let i = 0; i < 80; i++) {
   strip.appendChild(h);
 }
 
-let files = [];
+// 読み込んだファイルのオブジェクトと、そのArrayBufferをペアで管理する配列
+let files = []; 
 let worker = null;
 let isProcessing = false;
 let draggedItemIdx = null;
@@ -642,7 +642,7 @@ function isRaw(f) { return RAW_EXT.test(f.name); }
 function decodeRawFallbackMain(buffer, cropMode) {
   const bytes = new Uint8Array(buffer);
   const len = bytes.length;
-  if (len === 0) return ''; // バッファが空の場合は早期リターン
+  if (len === 0) return '';
   const width = 100;
   const height = cropMode ? 100 : 75; 
   const canvas = document.createElement('canvas');
@@ -667,10 +667,22 @@ function decodeRawFallbackMain(buffer, cropMode) {
   return canvas.toDataURL('image/jpeg');
 }
 
-function addFiles(newFiles) {
+// ファイル追加時に非同期で一度だけ ArrayBuffer を先読みして保持させる
+async function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
-  files = files.concat(added);
-  renderFileList(); updateComputed(); updateGenBtn();
+  
+  for (const fileObj of added) {
+    try {
+      const buf = await fileObj.arrayBuffer();
+      files.push({ file: fileObj, buffer: buf });
+    } catch (e) {
+      console.error("ファイルの読み込みに失敗しました:", fileObj.name, e);
+    }
+  }
+
+  renderFileList(); 
+  updateComputed(); 
+  updateGenBtn();
 }
 
 function cropToSquare(imageSource, cropMode) {
@@ -703,7 +715,10 @@ function renderFileList() {
   fileGrid.innerHTML = '';
   const cropMode = g('cropMode').checked;
 
-  files.forEach((f, i) => {
+  files.forEach((item, i) => {
+    const f = item.file;
+    const buf = item.buffer;
+
     const card = document.createElement('div'); 
     card.className = 'file-card';
     card.draggable = true;
@@ -730,9 +745,9 @@ function renderFileList() {
       card.classList.remove('drag-over-card');
       if (draggedItemIdx === null || draggedItemIdx === i) return;
 
-      const draggedFile = files[draggedItemIdx];
+      const draggedItem = files[draggedItemIdx];
       files.splice(draggedItemIdx, 1);
-      files.splice(i, 0, draggedFile);
+      files.splice(i, 0, draggedItem);
 
       draggedItemIdx = null;
       renderFileList();
@@ -769,21 +784,19 @@ function renderFileList() {
       const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
       thumb.appendChild(badge);
       
-      f.arrayBuffer().then(buf => {
-        const jpg = extractEmbeddedJpeg(buf);
-        if (jpg) {
-          cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
-            img.src = src;
-            if (src.startsWith('blob:')) {
-              img.onload = () => URL.revokeObjectURL(src);
-            }
-            thumb.appendChild(img);
-          });
-        } else {
-          img.src = decodeRawFallbackMain(buf, cropMode);
+      const jpg = extractEmbeddedJpeg(buf);
+      if (jpg) {
+        cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
+          img.src = src;
+          if (src.startsWith('blob:')) {
+            img.onload = () => URL.revokeObjectURL(src);
+          }
           thumb.appendChild(img);
-        }
-      });
+        });
+      } else {
+        img.src = decodeRawFallbackMain(buf, cropMode);
+        thumb.appendChild(img);
+      }
     }
 
     const status = document.createElement('div'); status.className = 'file-status'; status.id = `status-${i}`;
@@ -870,17 +883,17 @@ btnGen.onclick = async () => {
     while (activeSlots < MAX_SLOTS && nextIndex < total) {
       const idx = nextIndex++; activeSlots++;
       const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
-      try {
-        const buf = await files[idx].arrayBuffer();
-        // ⚠️ [buf]（Transferable）を外し、バッファ喪失バグを防ぐ
+      
+      // すでに先読みして保持されている ArrayBuffer をそのまま渡す
+      const buf = files[idx].buffer;
+      if (buf && buf.byteLength > 0) {
         worker.postMessage({ type: 'file', buffer: buf, index: idx });
-      } catch(_) {
+      } else {
         worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
       }
     }
   }
 
-  // 初回呼び出し時に、メインスレッドの location.href を一緒に渡すよう変更
   worker.postMessage({ type: 'init', total, settings: s, baseUrl: window.location.href });
 };
 </script>
