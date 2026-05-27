@@ -16,6 +16,7 @@
 'use strict';
 
 let librawModule = null;
+let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
 
 self.onmessage = async (ev) => {
   const msg = ev.data;
@@ -27,7 +28,7 @@ self.onmessage = async (ev) => {
     canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
     ctx = canvas.getContext('2d');
     
-    // メインスレッドから渡されたベースURLを元に、Wasmを正しくインポート
+    // 【重要】メインスレッドから渡されたベースURLを元に、Wasmを絶対パスで正しくインポート
     if (msg.baseUrl && !librawModule) {
       try {
         const librawUrl = new URL('libraw.js', msg.baseUrl).href;
@@ -246,8 +247,6 @@ async function decodeRawReal(buffer) {
   return await createImageBitmap(canvas);
 }
 
-let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
-
 async function processOne(buffer, index) {
   const s = settings;
   const h = new Uint8Array(buffer, 0, 4);
@@ -451,8 +450,8 @@ for (let i = 0; i < 80; i++) {
   strip.appendChild(h);
 }
 
-// 読み込んだファイルのオブジェクトと、そのArrayBufferをペアで管理する配列
-let files = []; 
+// ファイルオブジェクトと、事前ロードしたバッファをペアで保持する構造に変更
+let files = [];
 let worker = null;
 let isProcessing = false;
 let draggedItemIdx = null;
@@ -667,7 +666,7 @@ function decodeRawFallbackMain(buffer, cropMode) {
   return canvas.toDataURL('image/jpeg');
 }
 
-// ファイル追加時に非同期で一度だけ ArrayBuffer を先読みして保持させる
+// ファイル追加時に非同期で一度だけ ArrayBuffer を先読みして確実に配列に保持する
 async function addFiles(newFiles) {
   const added = Array.from(newFiles).filter(f => f.type.startsWith('image/') || isRaw(f));
   
@@ -784,6 +783,7 @@ function renderFileList() {
       const badge = document.createElement('div'); badge.className = 'raw-badge'; badge.textContent = 'RAW';
       thumb.appendChild(badge);
       
+      // 先読みしたバッファをそのまま同期的に使ってサムネイル表示
       const jpg = extractEmbeddedJpeg(buf);
       if (jpg) {
         cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
@@ -884,9 +884,9 @@ btnGen.onclick = async () => {
       const idx = nextIndex++; activeSlots++;
       const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
       
-      // すでに先読みして保持されている ArrayBuffer をそのまま渡す
       const buf = files[idx].buffer;
       if (buf && buf.byteLength > 0) {
+        // コピー送信にすることで複数回のGENERATE連打にも耐える安全設計に変更
         worker.postMessage({ type: 'file', buffer: buf, index: idx });
       } else {
         worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
@@ -894,6 +894,7 @@ btnGen.onclick = async () => {
     }
   }
 
+  // メイン画面のベースURLを渡してWorkerを正常初期化させる
   worker.postMessage({ type: 'init', total, settings: s, baseUrl: window.location.href });
 };
 </script>
