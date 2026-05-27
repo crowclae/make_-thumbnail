@@ -17,20 +17,64 @@
 
 let librawModule = null;
 
-// 1. Worker内でWebAssemblyグルーコードを安全に読み込み
-try {
-  importScripts('libraw.js');
-  if (typeof createLibRaw !== 'undefined') {
-    createLibRaw().then(Module => {
-      librawModule = Module;
-      console.log("[Worker] Wasm LibRaw successfully initialized.");
-    }).catch(err => {
-      console.warn("[Worker] Wasm createLibRaw promise rejected. Fallback ready.", err);
-    });
+// メインスレッドから渡されたベースURLを元に、Wasmを正しくインポートするよう修正
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+
+  if (msg.type === 'init') {
+    settings = msg.settings;
+    total = msg.total;
+    completed = 0;
+    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
+    ctx = canvas.getContext('2d');
+    
+    // Wasmの初期化をここで行う（ベースURLが取得できるため）
+    if (msg.baseUrl && !librawModule) {
+      try {
+        const librawUrl = new URL('libraw.js', msg.baseUrl).href;
+        importScripts(librawUrl);
+        if (typeof createLibRaw !== 'undefined') {
+          const Module = await createLibRaw();
+          librawModule = Module;
+          console.log("[Worker] Wasm LibRaw successfully initialized.");
+        }
+      } catch (e) {
+        console.warn("[Worker] Wasm initialization deferred or failed. Falling back to Embedded JPEG.", e);
+      }
+    }
+
+    if (!settings.transparentMode) {
+      ctx.fillStyle = settings.bgColor;
+      ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
+    } else {
+      ctx.clearRect(0, 0, settings.outputWidth, settings.outputHeight);
+    }
+    
+    self.postMessage({ type: 'ready' });
+    return;
   }
-} catch (e) {
-  console.warn("[Worker] Wasm initialization deferred or failed. Falling back to Embedded JPEG.", e);
-}
+
+  if (msg.type === 'file') {
+    const { buffer, index } = msg;
+    try {
+      await processOne(buffer, index);
+    } catch(e) {
+      self.postMessage({ type: 'slot_free', error: String(e), index });
+      return;
+    }
+    completed++;
+    self.postMessage({ type: 'slot_free', current: completed, total, index });
+    return;
+  }
+
+  if (msg.type === 'finalize') {
+    const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
+    const quality = settings.transparentMode ? undefined : 0.93;
+    const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
+    self.postMessage({ type: 'complete', blob });
+    return;
+  }
+};
 
 function parseDNGDimensions(buffer) {
   const view = new DataView(buffer);
@@ -55,7 +99,6 @@ function parseDNGDimensions(buffer) {
   }
 }
 
-// 【改良版】CR2(キヤノン)の特殊IFDタグ構造に完全対応した埋め込みJPEGパース
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -84,7 +127,6 @@ function extractEmbeddedJpeg(buffer) {
         cnt = view.getUint32(e + 4, le);
       } catch(_) { break; }
       
-      // CR2/TIFF対応: 0x0201(JPEGInterchangeFormat), 0x0111(StripOffsets) の双方をスキャン
       if (tag === 0x0201 || tag === 0x0111) {
         if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
       } else if (tag === 0x0202 || tag === 0x0117) {
@@ -114,7 +156,6 @@ function extractEmbeddedJpeg(buffer) {
   return scanForLargestJpeg(bytes, buffer);
 }
 
-// 高速セグメントスキップ型シークロジック（フリーズ・砂嵐を完全に防止）
 function scanForLargestJpeg(bytes, buffer) {
   let bestOff = -1, bestSize = 0;
   let i = 0;
@@ -127,7 +168,7 @@ function scanForLargestJpeg(bytes, buffer) {
       while (j < len - 1) {
         if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
           const marker = bytes[j + 1];
-          if (marker === 0xD9) { // End of Image
+          if (marker === 0xD9) {
             const size = j + 2 - start;
             if (size > bestSize) { bestSize = size; bestOff = start; }
             i = j + 2;
@@ -136,7 +177,7 @@ function scanForLargestJpeg(bytes, buffer) {
           } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
             if (j + 3 < len) {
               const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
-              j += 2 + segLen; // マーカーセグメントをジャンプして高速化
+              j += 2 + segLen;
               continue;
             }
           }
@@ -207,49 +248,6 @@ async function decodeRawReal(buffer) {
 }
 
 let canvas = null, ctx = null, settings = null, total = 0, completed = 0;
-
-self.onmessage = async (ev) => {
-  const msg = ev.data;
-
-  if (msg.type === 'init') {
-    settings = msg.settings;
-    total = msg.total;
-    completed = 0;
-    canvas = new OffscreenCanvas(settings.outputWidth, settings.outputHeight);
-    ctx = canvas.getContext('2d');
-    
-    if (!settings.transparentMode) {
-      ctx.fillStyle = settings.bgColor;
-      ctx.fillRect(0, 0, settings.outputWidth, settings.outputHeight);
-    } else {
-      ctx.clearRect(0, 0, settings.outputWidth, settings.outputHeight);
-    }
-    
-    self.postMessage({ type: 'ready' });
-    return;
-  }
-
-  if (msg.type === 'file') {
-    const { buffer, index } = msg;
-    try {
-      await processOne(buffer, index);
-    } catch(e) {
-      self.postMessage({ type: 'slot_free', error: String(e), index });
-      return;
-    }
-    completed++;
-    self.postMessage({ type: 'slot_free', current: completed, total, index });
-    return;
-  }
-
-  if (msg.type === 'finalize') {
-    const mimeType = settings.transparentMode ? 'image/png' : 'image/jpeg';
-    const quality = settings.transparentMode ? undefined : 0.93;
-    const blob = await canvas.convertToBlob({ type: mimeType, quality: quality });
-    self.postMessage({ type: 'complete', blob });
-    return;
-  }
-};
 
 async function processOne(buffer, index) {
   const s = settings;
@@ -476,7 +474,6 @@ const btnDl      = document.getElementById('btn-download');
 
 const g = id => document.getElementById(id);
 
-// メインスレッド側の埋め込みJPEG抽出（Worker側のロジックと完全統一）
 function extractEmbeddedJpeg(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 8) return null;
@@ -645,6 +642,7 @@ function isRaw(f) { return RAW_EXT.test(f.name); }
 function decodeRawFallbackMain(buffer, cropMode) {
   const bytes = new Uint8Array(buffer);
   const len = bytes.length;
+  if (len === 0) return ''; // バッファが空の場合は早期リターン
   const width = 100;
   const height = cropMode ? 100 : 75; 
   const canvas = document.createElement('canvas');
@@ -874,14 +872,16 @@ btnGen.onclick = async () => {
       const dot = g(`status-${idx}`); if (dot) dot.className = 'file-status busy';
       try {
         const buf = await files[idx].arrayBuffer();
-        worker.postMessage({ type: 'file', buffer: buf, index: idx }, [buf]);
+        // ⚠️ [buf]（Transferable）を外し、バッファ喪失バグを防ぐ
+        worker.postMessage({ type: 'file', buffer: buf, index: idx });
       } catch(_) {
         worker.postMessage({ type: 'file', buffer: new ArrayBuffer(0), index: idx });
       }
     }
   }
 
-  worker.postMessage({ type: 'init', total, settings: s });
+  // 初回呼び出し時に、メインスレッドの location.href を一緒に渡すよう変更
+  worker.postMessage({ type: 'init', total, settings: s, baseUrl: window.location.href });
 };
 </script>
 </body>
