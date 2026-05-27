@@ -209,12 +209,9 @@ function extractEmbeddedJpeg(buffer) {
   const isLE = bytes[0] === 0x49 && bytes[1] === 0x49;
   const isBE = bytes[0] === 0x4D && bytes[1] === 0x4D;
   if (!isLE && !isBE) return scanForLargestJpeg(bytes, buffer);
-
+  
   const view = new DataView(buffer);
   const le = isLE;
-  const magic = view.getUint16(2, le);
-  if (magic !== 42 && magic !== 0x2B) return scanForLargestJpeg(bytes, buffer);
-
   let bestOffset = -1, bestLen = 0;
 
   function parseIFD(off, depth) {
@@ -229,27 +226,19 @@ function extractEmbeddedJpeg(buffer) {
       if (e + 12 > buffer.byteLength) break;
       let tag, type, cnt;
       try {
-        tag  = view.getUint16(e,     le);
+        tag = view.getUint16(e, le);
         type = view.getUint16(e + 2, le);
-        cnt  = view.getUint32(e + 4, le);
+        cnt = view.getUint32(e + 4, le);
       } catch(_) { break; }
-
-      if (tag === 0x0201) {
-        try { jOff = view.getUint32(e + 8, le); } catch(_) {}
-      } else if (tag === 0x0202) {
-        try { jLen = view.getUint32(e + 8, le); } catch(_) {}
+      
+      // CR2対応: 0x0111(StripOffsets), 0x0117(StripByteCounts) もチェックする
+      if (tag === 0x0201 || tag === 0x0111) {
+        if (cnt === 1) { try { jOff = view.getUint32(e + 8, le); } catch(_) {} }
+      } else if (tag === 0x0202 || tag === 0x0117) {
+        if (cnt === 1) { try { jLen = view.getUint32(e + 8, le); } catch(_) {} }
       } else if (tag === 0x014A || tag === 0x8769 || tag === 0xA005) {
         try {
-          if (type === 4 && cnt >= 1) {
-            if (cnt === 1) {
-              parseIFD(view.getUint32(e + 8, le), depth + 1);
-            } else {
-              const listOff = view.getUint32(e + 8, le);
-              for (let k = 0; k < Math.min(cnt, 8); k++) {
-                parseIFD(view.getUint32(listOff + k * 4, le), depth + 1);
-              }
-            }
-          }
+          if (type === 4 && cnt === 1) parseIFD(view.getUint32(e + 8, le), depth + 1);
         } catch(_) {}
       }
     }
@@ -261,37 +250,51 @@ function extractEmbeddedJpeg(buffer) {
       if (nextOff > 0 && nextOff !== off) parseIFD(nextOff, depth + 1);
     } catch(_) {}
   }
-
   try { parseIFD(view.getUint32(4, le), 0); } catch(_) {}
-  if (bestOffset > 0) return buffer.slice(bestOffset, bestOffset + bestLen);
+  
+  // 見つけたオフセットが本当にJPEGの開始(FF D8)か検証
+  if (bestOffset > 0 && bestOffset + 2 <= bytes.length) {
+    if (bytes[bestOffset] === 0xFF && bytes[bestOffset + 1] === 0xD8) {
+      return buffer.slice(bestOffset, bestOffset + bestLen);
+    }
+  }
   return scanForLargestJpeg(bytes, buffer);
 }
+
+// セグメントスキップ対応の堅牢なJPEGスキャナ（入れ子サムネイルの罠を回避）
 
 
   
 function scanForLargestJpeg(bytes, buffer) {
-  const len = bytes.length;
   let bestOff = -1, bestSize = 0;
   let i = 0;
-  
+  const len = bytes.length;
   while (i < len - 1) {
-    // JPEGの開始マーカー (FF D8)
     if (bytes[i] === 0xFF && bytes[i + 1] === 0xD8) {
       const start = i;
-      i += 2;
-      // JPEGの終了マーカー (FF D9) を探す
-      while (i < len - 1) {
-        if (bytes[i] === 0xFF && bytes[i + 1] === 0xD9) {
-          const size = i + 2 - start;
-          if (size > bestSize) {
-            bestSize = size;
-            bestOff = start;
+      let j = i + 2;
+      let foundEOI = false;
+      while (j < len - 1) {
+        if (bytes[j] === 0xFF && bytes[j + 1] !== 0x00) {
+          const marker = bytes[j + 1];
+          if (marker === 0xD9) { // EOI (End Of Image)
+            const size = j + 2 - start;
+            if (size > bestSize) { bestSize = size; bestOff = start; }
+            i = j + 2;
+            foundEOI = true;
+            break;
+          } else if (marker >= 0xC0 && marker <= 0xFE && marker !== 0xDA && marker !== 0xD9) {
+            // セグメント長を持つマーカー（APPn, EXIF等）は中身ごとスキップする
+            if (j + 3 < len) {
+              const segLen = (bytes[j + 2] << 8) | bytes[j + 3];
+              j += 2 + segLen;
+              continue;
+            }
           }
-          i += 1;
-          break;
         }
-        i++;
+        j++;
       }
+      if (!foundEOI) i++;
     } else {
       i++;
     }
@@ -390,7 +393,8 @@ async function processOne(buffer, index) {
   if (!bitmap && isRawFile) {
     const extracted = extractEmbeddedJpeg(buffer);
     if (extracted) {
-      const blob = new Blob([extracted]);
+      //const blob = new Blob([extracted]);
+      const blob = new Blob([extracted], { type: 'image/jpeg' });
       const maxDim = Math.max(s.thumbW, s.thumbH) * 2;
       try {
         bitmap = await createImageBitmap(blob, {
@@ -884,7 +888,8 @@ function renderFileList() {
       f.arrayBuffer().then(buf => {
         const jpg = extractEmbeddedJpeg(buf);
         if (jpg) {
-          cropToSquare(new Blob([jpg]), cropMode).then(src => {
+          //cropToSquare(new Blob([jpg]), cropMode).then(src => {
+          cropToSquare(new Blob([jpg], { type: 'image/jpeg' }), cropMode).then(src => {
             img.src = src;
             if (src.startsWith('blob:')) {
               img.onload = () => URL.revokeObjectURL(src);
