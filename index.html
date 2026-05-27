@@ -602,9 +602,14 @@ function extractEmbeddedJpeg(buffer) {
   return bestOffset > 0 ? buffer.slice(bestOffset, bestOffset + bestLen) : null;
 }
 
-function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY) {
+// 【変更】引数に cropMode を追加
+function calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY, cropMode) {
   if (n <= 0) return { cols: 1, rows: 1 };
-  const IMG_W = 1, IMG_H = 1;   // 想定アスペクト比（横:縦 = 1:1）
+  
+  // 【追加】短辺クロップONなら1:1（正方形）、OFFならiPhone標準の4:3をベースにする
+  const IMG_W = cropMode ? 1 : 4;
+  const IMG_H = cropMode ? 1 : 3;
+  
   let bestCols = 1, bestArea = -1;
   for (let c = 1; c <= n; c++) {
     const r  = Math.ceil(n / c);
@@ -631,7 +636,8 @@ function getSettings() {
   const filename = g('filename').value || 'contact_sheet';
 
   const n = files.length || 1;
-  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY);
+  // 【変更】末尾の引数に cropMode を追加して引き渡す
+  const { cols, rows } = calcOptimalGrid(n, outW, outH, padX, padY, gapX, gapY, cropMode);
   const thumbW = Math.floor((outW - 2 * padX - (cols - 1) * gapX) / cols);
   const thumbH = Math.floor((outH - 2 * padY - (rows - 1) * gapY) / rows);
 
@@ -667,6 +673,7 @@ g('transparentMode').addEventListener('change', (e) => {
   btnDl.textContent = e.target.checked ? '↓ DOWNLOAD PNG' : '↓ DOWNLOAD JPEG';
 });
 
+// 【変更】配列内に 'cropMode' を追加
 ['outW','outH','gapX','gapY','padX','padY','cropMode', 'transparentMode'].forEach(id => {
   g(id).addEventListener('input', () => { updateComputed(); updateGenBtn(); });
 });
